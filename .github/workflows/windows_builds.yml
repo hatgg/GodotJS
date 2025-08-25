@@ -33,22 +33,10 @@ jobs:
             target: template_debug
             cache-limit: 2
 
-          - name: Template (target=template_debug, v8)
-            cache-name: windows-template-debug-v8
-            target: template_debug
-            cache-limit: 2
-
           - name: Editor (target=editor, qjs_ng)
             cache-name: windows-editor-qjs-ng
             target: editor
             sconsflags: vsproj=yes vsproj_gen_only=no windows_subsystem=console use_quickjs_ng=yes
-            cache-limit: 2
-            engine: qjs_ng
-
-          - name: Template (target=template_debug, qjs_ng)
-            cache-name: windows-template-debug-qjs-ng
-            target: template_debug
-            sconsflags: use_quickjs_ng=yes
             cache-limit: 2
             engine: qjs_ng
 

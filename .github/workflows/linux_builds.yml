@@ -30,11 +30,6 @@ jobs:
           - name: Template debug (target=template_debug, v8)
             cache-name: linux-template-debug-v8
             target: template_debug
-            cache-limit: 1
-
-          - name: Template debug (target=template_debug, v8)
-            cache-name: linux-template-debug-v8
-            target: template_debug
             bin: ./bin/godot.linuxbsd.template_debug.x86_64.v8
             cache-limit: 1
 
@@ -43,12 +38,6 @@ jobs:
             target: editor
             sconsflags: use_quickjs_ng=yes
             cache-limit: 2
-
-          - name: Template debug (target=template_debug, qjs_ng)
-            cache-name: linux-template-debug-qjs-ng
-            target: template_debug
-            sconsflags: use_quickjs_ng=yes
-            cache-limit: 1
 
           - name: Template debug (target=template_debug, qjs_ng)
             cache-name: linux-template-debug-qjs-ng

@@ -29,20 +29,9 @@ jobs:
             target: template_debug
             cache-limit: 1
 
-          - name: Template (target=template_debug, v8)
-            cache-name: macos-template-debug-v8
-            target: template_debug
-            cache-limit: 1
-
           - name: Editor (target=editor, qjs_ng)
             cache-name: macos-editor-qjs-ng
             target: editor
-            sconsflags: use_quickjs_ng=yes
-            cache-limit: 1
-
-          - name: Template (target=template_debug, qjs_ng)
-            cache-name: macos-template-debug-qjs-ng
-            target: template_debug
             sconsflags: use_quickjs_ng=yes
             cache-limit: 1
 
