@@ -142,7 +142,7 @@ jobs:
           mkdir editor-app
           cp -r misc/dist/macos_tools.app editor-app/Godot.app
           mkdir -p editor-app/Godot.app/Contents/MacOS
-          cp macos-editor-${{ matrix.engine }}/godot.macos.editor.universal editor-app/Godot.app/Contents/MacOS/Godot
+          cp macos-editor-${{ matrix.engine }}/godot.macos.editor.dev.universal editor-app/Godot.app/Contents/MacOS/Godot
           chmod +x editor-app/Godot.app/Contents/MacOS/Godot
 
       - name: ⏫ Upload editor app
