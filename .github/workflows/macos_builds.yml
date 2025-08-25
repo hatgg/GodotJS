@@ -105,8 +105,8 @@ jobs:
 # - https://github.com/godotengine/godot-build-scripts/blob/main/build-release.sh#L367-L375
       - name: Prepare artifact
         run: |
-          lipo -create ./bin/godot.macos.${{ matrix.target }}.x86_64 ./bin/godot.macos.${{ matrix.target }}.arm64 -output ./bin/godot.macos.${{ matrix.target }}.universal
-          rm ./bin/godot.macos.${{ matrix.target }}.x86_64 ./bin/godot.macos.${{ matrix.target }}.arm64
+          lipo -create ./bin/godot.macos.${{ matrix.target }}.dev.x86_64 ./bin/godot.macos.${{ matrix.target }}.dev.arm64 -output ./bin/godot.macos.${{ matrix.target }}.dev.universal
+          rm ./bin/godot.macos.${{ matrix.target }}.dev.x86_64 ./bin/godot.macos.${{ matrix.target }}.dev.arm64
           strip bin/godot.*
           chmod +x bin/godot.*
 
@@ -168,8 +168,8 @@ jobs:
           mkdir template-app
           cp -r misc/dist/macos_template.app template-app/macos_template.app
           mkdir -p template-app/macos_template.app/Contents/MacOS
-          cp macos-template-debug-${{ matrix.engine }}/godot.macos.template_debug.universal template-app/macos_template.app/Contents/MacOS/godot_macos_release.universal
-          cp macos-template-debug-${{ matrix.engine }}/godot.macos.template_debug.universal template-app/macos_template.app/Contents/MacOS/godot_macos_debug.universal
+          cp macos-template-debug-${{ matrix.engine }}/godot.macos.template_debug.dev.universal template-app/macos_template.app/Contents/MacOS/godot_macos_release.universal
+          cp macos-template-debug-${{ matrix.engine }}/godot.macos.template_debug.dev.universal template-app/macos_template.app/Contents/MacOS/godot_macos_debug.universal
           chmod +x template-app/macos_template.app/Contents/MacOS/godot_macos*
 
       - name: ⏫ Upload template app
