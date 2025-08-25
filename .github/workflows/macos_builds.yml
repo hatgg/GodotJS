@@ -8,7 +8,7 @@ on:
 
 # Global Settings
 env:
-  SCONSFLAGS: module_text_server_fb_enabled=yes strict_checks=yes
+  SCONSFLAGS: threads=no dev_build=yes debug_symbols=yes optimize=debug module_text_server_fb_enabled=yes strict_checks=yes
 
 jobs:
   build-macos:
@@ -24,16 +24,14 @@ jobs:
             target: editor
             cache-limit: 1
 
-          - name: Template (target=template_release, v8)
-            cache-name: macos-template-release-v8
-            target: template_release
-            sconsflags: debug_symbols=no
+          - name: Template (target=template_debug, v8)
+            cache-name: macos-template-debug-v8
+            target: template_debug
             cache-limit: 1
 
           - name: Template (target=template_debug, v8)
             cache-name: macos-template-debug-v8
             target: template_debug
-            sconsflags: debug_symbols=no
             cache-limit: 1
 
           - name: Editor (target=editor, qjs_ng)
@@ -42,16 +40,16 @@ jobs:
             sconsflags: use_quickjs_ng=yes
             cache-limit: 1
 
-          - name: Template (target=template_release, qjs_ng)
-            cache-name: macos-template-release-qjs-ng
-            target: template_release
-            sconsflags: debug_symbols=no use_quickjs_ng=yes
+          - name: Template (target=template_debug, qjs_ng)
+            cache-name: macos-template-debug-qjs-ng
+            target: template_debug
+            sconsflags: use_quickjs_ng=yes
             cache-limit: 1
 
           - name: Template (target=template_debug, qjs_ng)
             cache-name: macos-template-debug-qjs-ng
             target: template_debug
-            sconsflags: debug_symbols=no use_quickjs_ng=yes
+            sconsflags: use_quickjs_ng=yes
             cache-limit: 1
 
     steps:
@@ -164,11 +162,11 @@ jobs:
           name: macos-editor-app-${{ matrix.engine }}
           path: editor-app
 
-      - name: ⏬ Download template-release
+      - name: ⏬ Download template-debug
         uses: actions/download-artifact@v4
         with:
-          name: macos-template-release-${{ matrix.engine }}
-          path: macos-template-release-${{ matrix.engine }}
+          name: macos-template-debug-${{ matrix.engine }}
+          path: macos-template-debug-${{ matrix.engine }}
 
       - name: ⏬ Download template-debug
         uses: actions/download-artifact@v4
@@ -181,7 +179,7 @@ jobs:
           mkdir template-app
           cp -r misc/dist/macos_template.app template-app/macos_template.app
           mkdir -p template-app/macos_template.app/Contents/MacOS
-          cp macos-template-release-${{ matrix.engine }}/godot.macos.template_release.universal template-app/macos_template.app/Contents/MacOS/godot_macos_release.universal
+          cp macos-template-debug-${{ matrix.engine }}/godot.macos.template_debug.universal template-app/macos_template.app/Contents/MacOS/godot_macos_release.universal
           cp macos-template-debug-${{ matrix.engine }}/godot.macos.template_debug.universal template-app/macos_template.app/Contents/MacOS/godot_macos_debug.universal
           chmod +x template-app/macos_template.app/Contents/MacOS/godot_macos*
 

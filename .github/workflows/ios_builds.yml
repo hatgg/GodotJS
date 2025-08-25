@@ -8,31 +8,31 @@ on:
 
 # Global Settings
 env:
-  SCONSFLAGS: debug_symbols=no module_text_server_fb_enabled=yes
+  SCONSFLAGS: threads=no dev_build=yes debug_symbols=yes optimize=debug module_text_server_fb_enabled=yes
 
 jobs:
   ios-template:
     runs-on: macos-latest
     timeout-minutes: 60
-    name: Template (target=template_release)
+    name: Template (target=template_debug)
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Template (target=template_release, v8)
-            cache-name: ios-template-release-v8
-            target: template_release
+          - name: Template (target=template_debug, v8)
+            cache-name: ios-template-debug-v8
+            target: template_debug
             cache-limit: 1
 
-          - name: Template (target=template_release, qjs_ng)
-            cache-name: ios-template-release-qjs-ng
-            target: template_release
+          - name: Template (target=template_debug, qjs_ng)
+            cache-name: ios-template-debug-qjs-ng
+            target: template_debug
             sconsflags: use_quickjs_ng=yes
             cache-limit: 1
 
-#          - name: Template (target=template_release, jsc)
+#          - name: Template (target=template_debug, jsc)
 #            cache-name: ios-template-jsc
-#            target: template_release
+#            target: template_debug
 #            sconsflags: use_jsc=yes
 #            cache-limit: 1
 

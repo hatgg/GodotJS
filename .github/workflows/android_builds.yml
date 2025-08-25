@@ -8,7 +8,7 @@ on:
 
 # Global Settings
 env:
-  SCONSFLAGS: strict_checks=yes debug_symbols=no module_text_server_fb_enabled=yes
+  SCONSFLAGS: threads=no dev_build=yes debug_symbols=yes optimize=debug strict_checks=yes module_text_server_fb_enabled=yes
 
 # We only build template release - most developers will use a desktop device for editor
 jobs:
@@ -20,16 +20,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Template (target=template_release, arch=arm64, v8)
-            cache-name: android-template-release-v8
-            target: template_release
+          - name: Template (target=template_debug, arch=arm64, v8)
+            cache-name: android-template-debug-v8
+            target: template_debug
             tests: false
             sconsflags: arch=arm64 swappy=yes deprecated=no ndk_platform=android-24 generate_apk=yes
             cache-limit: 1
 
-          - name: Template (target=template_release, arch=arm64, qjs_ng)
-            cache-name: android-template-release-qjs-ng
-            target: template_release
+          - name: Template (target=template_debug, arch=arm64, qjs_ng)
+            cache-name: android-template-debug-qjs-ng
+            target: template_debug
             tests: false
             sconsflags: arch=arm64 swappy=yes use_quickjs_ng=yes
             cache-limit: 1
@@ -97,7 +97,7 @@ jobs:
         continue-on-error: true
 
       - name: Generate Godot templates
-        if: matrix.target == 'template_release'
+        if: matrix.target == 'template_debug'
         run: |
           cd platform/android/java
           ./gradlew generateGodotTemplates

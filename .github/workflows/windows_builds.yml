@@ -9,7 +9,7 @@ on:
 # Global Settings
 # SCONS_CACHE for windows must be set in the build environment
 env:
-  SCONSFLAGS: module_text_server_fb_enabled=yes d3d12=yes strict_checks=yes "angle_libs=${{ github.workspace }}/"
+  SCONSFLAGS: threads=no dev_build=yes debug_symbols=yes optimize=debug module_text_server_fb_enabled=yes d3d12=yes strict_checks=yes "angle_libs=${{ github.workspace }}/"
   SCONS_CACHE_MSVC_CONFIG: true
 
 jobs:
@@ -25,41 +25,37 @@ jobs:
           - name: Editor (target=editor, v8)
             cache-name: windows-editor-v8
             target: editor
-            # Skip debug symbols, they're way too big with MSVC.
-            sconsflags: debug_symbols=no vsproj=yes vsproj_gen_only=no windows_subsystem=console
+            sconsflags: vsproj=yes vsproj_gen_only=no windows_subsystem=console
             cache-limit: 2
 
           - name: Template (target=template_debug, v8)
             cache-name: windows-template-debug-v8
             target: template_debug
-            sconsflags: debug_symbols=no
             cache-limit: 2
 
-          - name: Template (target=template_release, v8)
-            cache-name: windows-template-release-v8
-            target: template_release
-            sconsflags: debug_symbols=no
+          - name: Template (target=template_debug, v8)
+            cache-name: windows-template-debug-v8
+            target: template_debug
             cache-limit: 2
 
           - name: Editor (target=editor, qjs_ng)
             cache-name: windows-editor-qjs-ng
             target: editor
-            # Skip debug symbols, they're way too big with MSVC.
-            sconsflags: debug_symbols=no vsproj=yes vsproj_gen_only=no windows_subsystem=console use_quickjs_ng=yes
+            sconsflags: vsproj=yes vsproj_gen_only=no windows_subsystem=console use_quickjs_ng=yes
             cache-limit: 2
             engine: qjs_ng
 
           - name: Template (target=template_debug, qjs_ng)
             cache-name: windows-template-debug-qjs-ng
             target: template_debug
-            sconsflags: debug_symbols=no use_quickjs_ng=yes
+            sconsflags: use_quickjs_ng=yes
             cache-limit: 2
             engine: qjs_ng
 
-          - name: Template (target=template_release, qjs_ng)
-            cache-name: windows-template-release-qjs-ng
-            target: template_release
-            sconsflags: debug_symbols=no use_quickjs_ng=yes
+          - name: Template (target=template_debug, qjs_ng)
+            cache-name: windows-template-debug-qjs-ng
+            target: template_debug
+            sconsflags: use_quickjs_ng=yes
             cache-limit: 2
             engine: qjs_ng
 

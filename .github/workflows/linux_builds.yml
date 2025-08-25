@@ -8,7 +8,7 @@ on:
 
 # Global Settings
 env:
-  SCONSFLAGS: module_text_server_fb_enabled=yes strict_checks=yes
+  SCONSFLAGS: threads=no dev_build=yes debug_symbols=yes optimize=debug module_text_server_fb_enabled=yes strict_checks=yes
   TSAN_OPTIONS: suppressions=misc/error_suppressions/tsan.txt
   UBSAN_OPTIONS: suppressions=misc/error_suppressions/ubsan.txt
 
@@ -27,15 +27,13 @@ jobs:
             target: editor
             cache-limit: 2
 
-          - name: Template release (target=template_release, v8)
-            cache-name: linux-template-release-v8
-            sconsflags: debug_symbols=no
-            target: template_release
+          - name: Template debug (target=template_debug, v8)
+            cache-name: linux-template-debug-v8
+            target: template_debug
             cache-limit: 1
 
           - name: Template debug (target=template_debug, v8)
             cache-name: linux-template-debug-v8
-            sconsflags: debug_symbols=no
             target: template_debug
             bin: ./bin/godot.linuxbsd.template_debug.x86_64.v8
             cache-limit: 1
@@ -46,16 +44,16 @@ jobs:
             sconsflags: use_quickjs_ng=yes
             cache-limit: 2
 
-          - name: Template release (target=template_release, qjs_ng)
-            cache-name: linux-template-release-qjs-ng
-            target: template_release
-            sconsflags: use_quickjs_ng=yes debug_symbols=no
+          - name: Template debug (target=template_debug, qjs_ng)
+            cache-name: linux-template-debug-qjs-ng
+            target: template_debug
+            sconsflags: use_quickjs_ng=yes
             cache-limit: 1
 
           - name: Template debug (target=template_debug, qjs_ng)
             cache-name: linux-template-debug-qjs-ng
             target: template_debug
-            sconsflags: use_quickjs_ng=yes debug_symbols=no
+            sconsflags: use_quickjs_ng=yes
             cache-limit: 1
 
     steps:
