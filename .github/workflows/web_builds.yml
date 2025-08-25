@@ -8,7 +8,7 @@ on:
 
 # Global Settings
 env:
-  SCONSFLAGS: threads=no dev_build=yes debug_symbols=yes optimize=debug use_closure_compiler=yes strict_checks=yes deprecated=no lto=none use_assertions=no use_safe_heap=yes
+  SCONSFLAGS: dev_build=yes debug_symbols=yes optimize=debug use_closure_compiler=yes strict_checks=yes deprecated=no lto=none use_assertions=no use_safe_heap=yes
   EM_VERSION: 3.1.64
 
 jobs:
@@ -23,20 +23,22 @@ jobs:
           - name: Template w/ threads (target=template_debug, threads=yes, v8)
             cache-name: web-template-debug-v8
             target: template_debug
+            sconsflags: threads=yes
 
           - name: Template w/o threads (target=template_debug, threads=no, v8)
             cache-name: web-nothreads-template-debug-v8
             target: template_debug
+            sconsflags: threads=no
 
           - name: Template w/ threads (target=template_debug, threads=yes, qjs_ng)
             cache-name: web-template-debug-qjs-ng
             target: template_debug
-            sconsflags: use_quickjs_ng=yes
+            sconsflags: threads=yes use_quickjs_ng=yes
 
           - name: Template w/o threads (target=template_debug, threads=no, qjs_ng)
             cache-name: web-nothreads-template-debug-qjs-ng
             target: template_debug
-            sconsflags: use_quickjs_ng=yes
+            sconsflags: threads=no use_quickjs_ng=yes
 
     steps:
       - name: Checkout Godot

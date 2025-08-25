@@ -8,7 +8,7 @@ on:
 
 # Global Settings
 env:
-  SCONSFLAGS: threads=no dev_build=yes debug_symbols=yes optimize=debug module_text_server_fb_enabled=yes strict_checks=yes
+  SCONSFLAGS: dev_build=yes debug_symbols=yes optimize=debug module_text_server_fb_enabled=yes strict_checks=yes
 
 jobs:
   build-macos:
