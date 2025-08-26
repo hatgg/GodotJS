@@ -8,7 +8,7 @@ on:
 
 # Global Settings
 env:
-  SCONSFLAGS: dev_build=yes debug_symbols=no optimize=debug use_closure_compiler=yes strict_checks=yes deprecated=no lto=none use_assertions=no use_safe_heap=yes
+  SCONSFLAGS: dev_build=yes debug_symbols=yes optimize=debug use_closure_compiler=no strict_checks=yes deprecated=no lto=no use_assertions=no use_safe_heap=yes
   EM_VERSION: 3.1.64
 
 jobs:
