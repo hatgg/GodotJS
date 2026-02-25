@@ -38,9 +38,9 @@ jobs:
           - version: 4.5.1
             version_mm: 4.5
             version_ref: 4.5.1-stable
-          - version: 4.6dev
+          - version: 4.6
             version_mm: 4.6
-            version_ref: master
+            version_ref: 4.6-stable
     uses: ./.github/workflows/build_engine_version.yml
     with:
       version: ${{ matrix.version }}
@@ -57,7 +57,7 @@ jobs:
       matrix:
         include:
           - version: 4.5.1
-          - version: 4.6dev
+          - version: 4.6
     with:
       version: ${{ matrix.version }}
 
@@ -95,6 +95,6 @@ jobs:
       matrix:
         include:
           - version: 4.5.1
-          - version: 4.6dev
+          - version: 4.6
     with:
       version: ${{ matrix.version }}

@@ -51,7 +51,7 @@ namespace jsb::internal
 
             void resize(size_t p_last_num, size_t p_num)
             {
-                data = (AnyType*)memrealloc(data, next_power_of_2((unsigned int) (p_num * kSizeOfElement)));
+                data = (AnyType*)memrealloc(data, Math::next_power_of_2((unsigned int) (p_num * kSizeOfElement)));
                 jsb_check(data);
                 const size_t added_count = p_num - p_last_num;
                 memset((void *)((unsigned char*) data + p_last_num * kSizeOfElement), 0,
