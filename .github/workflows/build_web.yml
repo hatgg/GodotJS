@@ -24,8 +24,6 @@ env:
     warnings=extra
     strict_checks=yes
     tests=no
-    debug_symbols=no
-    use_closure_compiler=yes
     skip_js_runtime=yes
 
 jobs:
@@ -106,6 +104,7 @@ jobs:
           scons-flags: >-
             ${{ env.SCONS_FLAGS }}
             ${{ matrix.engine == 'qjs-ng' && 'use_quickjs_ng=yes' || '' }}
+            ${{ matrix.target == 'template_release' && 'use_closure_compiler=yes debug_symbols=no' || 'use_closure_compiler=no debug_symbols=yes' }}
           platform: web
           target: ${{ matrix.target }}
 
