@@ -108,6 +108,17 @@ enum jsbb_LogLevel {
 
 let jsbb_logLevel: jsbb_LogLevel = jsbb_LogLevel.WARN;
 
+if (typeof globalThis !== "undefined" && (globalThis as any).__JSBB_LOG_LEVEL__) {
+    const levels: Record<string, jsbb_LogLevel> = {
+        "DEBUG": jsbb_LogLevel.DEBUG,
+        "INFO": jsbb_LogLevel.INFO,
+        "WARN": jsbb_LogLevel.WARN,
+        "ERROR": jsbb_LogLevel.ERROR,
+        "NONE": jsbb_LogLevel.NONE,
+    };
+    jsbb_logLevel = levels[(globalThis as any).__JSBB_LOG_LEVEL__] ?? jsbb_LogLevel.WARN;
+}
+
 const jsbb_console = {
     debug: function (...args: any[]) {
         if (jsbb_logLevel <= jsbb_LogLevel.DEBUG) console.log("[jsbb]", ...args);
