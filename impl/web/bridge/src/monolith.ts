@@ -98,18 +98,31 @@ function jsbb_ensure(condition: boolean) {
     console.assert(condition);
 }
 
+enum jsbb_LogLevel {
+    DEBUG = 0,
+    INFO = 1,
+    WARN = 2,
+    ERROR = 3,
+    NONE = 4,
+}
+
+let jsbb_logLevel: jsbb_LogLevel = jsbb_LogLevel.WARN;
+
 const jsbb_console = {
+    debug: function (...args: any[]) {
+        if (jsbb_logLevel <= jsbb_LogLevel.DEBUG) console.log("[jsbb]", ...args);
+    },
     log: function (...args: any[]) {
-        console.log("[jsbb]", ...args);
+        if (jsbb_logLevel <= jsbb_LogLevel.INFO) console.log("[jsbb]", ...args);
     },
     warn: function (...args: any[]) {
-        console.warn("[jsbb]", ...args);
+        if (jsbb_logLevel <= jsbb_LogLevel.WARN) console.warn("[jsbb]", ...args);
     },
     error: function (...args: any[]) {
-        console.error("[jsbb]", ...args);
-    }, 
+        if (jsbb_logLevel <= jsbb_LogLevel.ERROR) console.error("[jsbb]", ...args);
+    },
     trace: function (...args: any[]) {
-        console.trace("[jsbb]", ...args);
+        if (jsbb_logLevel <= jsbb_LogLevel.DEBUG) console.trace("[jsbb]", ...args);
     }
 }
 
@@ -271,14 +284,14 @@ class jsbb_Registry {
         const self = this;
         this.engine_opaque = engine_opaque;
         this.watcher = new FinalizationRegistry(function (internal_data) {
-            jsbb_console.log("gc.dealloc", internal_data);
+            jsbb_console.debug("gc: released object (internal_data=" + internal_data + ")");
             --self._count;
             _jsbb_.interop.gc_callback(self.engine_opaque, internal_data);
         });
     }
 
     Add(obj: any, internal_data: Pointer): void {
-        jsbb_console.log("gc.alloc", internal_data);
+        jsbb_console.debug("gc: registered object (internal_data=" + internal_data + ")");
 
         // opaque saved in obj[opaque.symbol] for GetOpaque(), it's never changed.
         obj[jsbb_opaque] = internal_data;
@@ -333,7 +346,7 @@ class jsbb_Engine {
     }
 
     constructor(engine_id: EngineID, opaque: Pointer) {
-        jsbb_console.log("new engine", engine_id, opaque);
+        jsbb_console.log("engine created (id=" + engine_id + ", opaque=0x" + opaque.toString(16) + ")");
         this._id = engine_id;
         this._opaque = opaque;
         // this._global = {};
@@ -682,7 +695,7 @@ class jsbb_Engine {
                 // cleanup
                 self._stack.ExitScope();
 
-                jsbb_console.log("evaluated lazy property", key, rval);
+                jsbb_console.debug("evaluated lazy property", key, rval);
                 // overwrite 
                 Object.defineProperty(this, key, {
                     value: rval,
@@ -1133,7 +1146,7 @@ class jsbb_Engine {
             self._registry.Add(this, internal_data);
 
             try {
-                jsbb_console.log("new class dispatch", class_name, cb, is_construct_call, rval_pos, argc, internal_data);
+                jsbb_console.debug("class " + class_name + " constructed (cb=0x" + cb.toString(16) + ", constructor=" + is_construct_call + ", args=" + argc + ", internal_data=" + internal_data + ")");
                 _jsbb_.interop.call_function(self._opaque, cb, is_construct_call, rval_pos, argc);
                 self.rethrow_native_error();
             } catch (err) {
@@ -1258,11 +1271,11 @@ class _jsbb_ {
             this.wasmop = { UTF8ToString, stringToUTF8, lengthBytesUTF8, _malloc, _free };
             for (let key in this.interop) {
                 //@ts-ignore
-                jsbb_console.log("define jsbi.interop", key, typeof this.interop[key]);
+                jsbb_console.debug("define jsbi.interop", key, typeof this.interop[key]);
             }
             for (let key in this.wasmop) {
                 //@ts-ignore
-                jsbb_console.log("define jsbi.wasmop", key, typeof this.wasmop[key]);
+                jsbb_console.debug("define jsbi.wasmop", key, typeof this.wasmop[key]);
             }
         } catch (err) {
             jsbb_console.error("unexpected error:", err);
@@ -1296,6 +1309,17 @@ class _jsbb_ {
             return undefined;
         }
         return this.engine;
+    }
+
+    static setLogLevel(level: string) {
+        const levels: Record<string, jsbb_LogLevel> = {
+            "DEBUG": jsbb_LogLevel.DEBUG,
+            "INFO": jsbb_LogLevel.INFO,
+            "WARN": jsbb_LogLevel.WARN,
+            "ERROR": jsbb_LogLevel.ERROR,
+            "NONE": jsbb_LogLevel.NONE,
+        };
+        jsbb_logLevel = levels[level.toUpperCase()] ?? jsbb_LogLevel.WARN;
     }
 
     static is_object(val: any) {

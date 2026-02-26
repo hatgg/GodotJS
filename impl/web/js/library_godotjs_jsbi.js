@@ -4,7 +4,6 @@ const GodotJSBrowserInterface = {
     // $GodotJSBrowserInterface: {},
     
     jsbi_init: function (gc_callback, unhandled_rejection, call_function, call_accessor, generate_internal_data) {
-        console.log("calling jsbi_init");
         return _jsbb_.init({ gc_callback, unhandled_rejection, call_function, call_accessor, generate_internal_data });
     },
 
