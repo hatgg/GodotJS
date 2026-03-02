@@ -4,6 +4,22 @@
 #include "jsb_callable.h"
 #include "jsb_object_bindings.h"
 
+#if JSB_RUNTIME_RELOAD && JSB_WITH_WEB
+#include "../weaver/jsb_script_language.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+extern "C" {
+EMSCRIPTEN_KEEPALIVE void jsb_scan_external_changes()
+{
+    if (GodotJSScriptLanguage* lang = GodotJSScriptLanguage::get_singleton())
+    {
+        lang->scan_external_changes();
+    }
+}
+}
+#endif
+#endif
+
 namespace jsb
 {
     namespace
@@ -595,6 +611,13 @@ namespace jsb
 #if JSB_RUNTIME_RELOAD
                 internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "scan_external_changes"),
                     JSB_NEW_FUNCTION(context, _scan_external_changes, {})).Check();
+#if JSB_WITH_WEB && defined(__EMSCRIPTEN__)
+                EM_ASM({
+                    globalThis.__godotjs_scan_external_changes = function() {
+                        Module._jsb_scan_external_changes();
+                    };
+                });
+#endif
 #endif
 
                 internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "create_script_cached_property_updater"), JSB_NEW_FUNCTION(context, _create_script_cached_property_updater, {})).Check();
