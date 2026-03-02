@@ -61,7 +61,11 @@
 // (only available in editor build)
 // support hot-reload for javascript modules
 #define JSB_SUPPORT_RELOAD 1
-#define JSB_RUNTIME_RELOAD (JSB_SUPPORT_RELOAD && (defined(TOOLS_ENABLED) || JSB_WITH_WEB))
+#if defined(TOOLS_ENABLED) || JSB_WITH_WEB
+#define JSB_RUNTIME_RELOAD JSB_SUPPORT_RELOAD
+#else
+#define JSB_RUNTIME_RELOAD 0
+#endif
 
 // EXPERIMENTAL, LIMITED SUPPORT
 // only implemented in v8.impl, jsc.impl and quickjs.impl, temporarily.
