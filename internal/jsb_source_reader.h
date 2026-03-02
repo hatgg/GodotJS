@@ -47,6 +47,7 @@ namespace jsb::internal
         virtual uint64_t get_time_modified() const override { return FileAccess::get_modified_time(file_->get_path()); }
         virtual String get_hash() const override { return FileAccess::get_md5(file_->get_path()); }
 #endif
+
     };
 
     class StringSourceReader : public ISourceReader

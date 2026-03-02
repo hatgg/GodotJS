@@ -20,8 +20,9 @@ namespace jsb
 #if JSB_RUNTIME_RELOAD
         if (!is_reloadable()) return false;
 
-        //TODO reload all related modules (search the module graph) ?
-        //TODO inconsistent implementation, since the original time modified is read in module resolvers (SourceReader)
+        // On Web, we usually don't have reliable file modification time for MEMFS files
+        // and we rely on external triggers (like Vite) to call scan_external_changes.
+#if !defined(WEB_ENABLED)
         const uint64_t latest_time = FileAccess::get_modified_time(source_info.source_filepath);
         if (latest_time && latest_time != time_modified)
         {
@@ -35,6 +36,10 @@ namespace jsb
                 return true;
             }
         }
+#else
+        reload_requested = true;
+        return true;
+#endif
 #endif
         return false;
     }
