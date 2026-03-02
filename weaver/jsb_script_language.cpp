@@ -289,7 +289,14 @@ Vector<ScriptLanguage::ScriptTemplate> GodotJSScriptLanguage::get_built_in_templ
 #if GODOT_4_3_OR_NEWER
 void GodotJSScriptLanguage::reload_scripts(const Array& p_scripts, bool p_soft_reload)
 {
-    JSB_LOG(Verbose, "TODO [GodotJSScriptLanguage::reload_scripts] NOT IMPLEMENTED");
+    for (int i = 0; i < p_scripts.size(); i++)
+    {
+        Ref<GodotJSScript> script = p_scripts[i];
+        if (script.is_valid())
+        {
+            script->reload(p_soft_reload);
+        }
+    }
 }
 
 void GodotJSScriptLanguage::profiling_set_save_native_calls(bool p_enable)
@@ -300,14 +307,26 @@ void GodotJSScriptLanguage::profiling_set_save_native_calls(bool p_enable)
 
 void GodotJSScriptLanguage::reload_all_scripts()
 {
-    //TODO temporarily ignored because it's only called from `RemoteDebugger`
-    JSB_LOG(Verbose, "TODO [GodotJSScriptLanguage::reload_all_scripts] temporarily ignored because it's only called from `RemoteDebugger`");
+    MutexLock lock(mutex_);
+    SelfList<GodotJSScript>* elem = script_list_.first();
+    while (elem)
+    {
+        GodotJSScript* script = elem->self();
+        if (script->is_valid())
+        {
+            script->reload(true);
+        }
+        elem = elem->next();
+    }
 }
 
 void GodotJSScriptLanguage::reload_tool_script(const Ref<Script>& p_script, bool p_soft_reload)
 {
-    //TODO temporarily ignored because it's only called from `ResourceSaver` (we usually write typescripts in vscode)
-    JSB_LOG(Verbose, "TODO [GodotJSScriptLanguage::reload_tool_script] temporarily ignored because it's only called from `ResourceSaver` (we usually write typescripts in vscode)");
+    Ref<GodotJSScript> script = p_script;
+    if (script.is_valid())
+    {
+        script->reload(p_soft_reload);
+    }
 }
 
 void GodotJSScriptLanguage::get_recognized_extensions(List<String>* p_extensions) const
