@@ -433,6 +433,13 @@ namespace jsb
             info.GetReturnValue().Set(JSB_NEW_FUNCTION(context, ObjectReflectBindingUtil::_godot_object_signal_get, signal_name_js));
         }
 
+        static void _scan_external_changes(const v8::FunctionCallbackInfo<v8::Value>& info)
+        {
+            v8::Isolate* isolate = info.GetIsolate();
+            Environment* env = Environment::wrap(isolate);
+            env->scan_external_changes();
+        }
+
         void _find_module(const v8::FunctionCallbackInfo<v8::Value>& info)
         {
             v8::Isolate* isolate = info.GetIsolate();
@@ -559,6 +566,8 @@ namespace jsb
             jsb_obj->Set(context, impl::Helper::new_string_ascii(isolate, "DEBUG_ENABLED"), v8::Boolean::New(isolate, false)).Check();
 #endif
             jsb_obj->Set(context, impl::Helper::new_string_ascii(isolate, "CAMEL_CASE_BINDINGS_ENABLED"), v8::Boolean::New(isolate, internal::Settings::get_camel_case_bindings_enabled())).Check();
+            jsb_obj->Set(context, impl::Helper::new_string_ascii(isolate, "RUNTIME_RELOAD"),
+                v8::Boolean::New(isolate, JSB_RUNTIME_RELOAD != 0)).Check();
             jsb_obj->Set(context, impl::Helper::new_string_ascii(isolate, "version"), impl::Helper::new_string(isolate, JSB_STRINGIFY(JSB_MAJOR_VERSION) "." JSB_STRINGIFY(JSB_MINOR_VERSION) "." JSB_STRINGIFY(JSB_PATCH_VERSION))).Check();
             jsb_obj->Set(context, impl::Helper::new_string_ascii(isolate, "impl"), impl::Helper::new_string(isolate, JSB_IMPL_VERSION_STRING)).Check();
             jsb_obj->Set(context, impl::Helper::new_string_ascii(isolate, "callable"), JSB_NEW_FUNCTION(context, _new_callable, {})).Check();
@@ -583,6 +592,10 @@ namespace jsb
                 internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "add_script_rpc"), JSB_NEW_FUNCTION(context, _add_script_rpc, {})).Check();
                 internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "set_script_doc"), JSB_NEW_FUNCTION(context, _set_script_doc, {})).Check();
                 internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "notify_microtasks_run"), JSB_NEW_FUNCTION(context, _notify_microtasks_run, {})).Check();
+#if JSB_RUNTIME_RELOAD
+                internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "scan_external_changes"),
+                    JSB_NEW_FUNCTION(context, _scan_external_changes, {})).Check();
+#endif
 
                 internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "create_script_cached_property_updater"), JSB_NEW_FUNCTION(context, _create_script_cached_property_updater, {})).Check();
                 internal_obj->Set(context, impl::Helper::new_string_ascii(isolate, "create_script_signal_getter"), JSB_NEW_FUNCTION(context, _create_script_signal_getter, {})).Check();

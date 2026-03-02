@@ -17,7 +17,7 @@ namespace jsb
 
     bool JavaScriptModule::mark_as_reloading()
     {
-#if JSB_SUPPORT_RELOAD && defined(TOOLS_ENABLED)
+#if JSB_RUNTIME_RELOAD
         if (!is_reloadable()) return false;
 
         //TODO reload all related modules (search the module graph) ?
@@ -41,7 +41,7 @@ namespace jsb
 
     void JavaScriptModule::mark_as_reloaded()
     {
-#if JSB_SUPPORT_RELOAD && defined(TOOLS_ENABLED)
+#if JSB_RUNTIME_RELOAD
         reload_requested = false;
 #endif
     }
