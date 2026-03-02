@@ -23,3 +23,13 @@ jobs:
       version_mm: "4.6"
       version_ref: 4.6-stable
       release: false
+
+  macos-build:
+    name: 🍎 macOS
+    needs: [environment]
+    uses: ./.github/workflows/build_macos.yml
+    with:
+      version: "4.6"
+      version_mm: "4.6"
+      version_ref: 4.6-stable
+      release: false
