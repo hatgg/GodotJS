@@ -18,6 +18,7 @@
 #include "../internal/jsb_variant_util.h"
 #include "../internal/jsb_settings.h"
 #include "../jsb_project_preset.h"
+#include "../weaver/jsb_script_instance.h"
 
 #ifdef TOOLS_ENABLED
 #if GODOT_4_5_OR_NEWER
@@ -1322,6 +1323,14 @@ namespace jsb
             if (try_catch.has_caught())
             {
                 JSB_LOG(Warning, "something wrong\n%s", BridgeHelper::get_exception(try_catch));
+            }
+        }
+
+        if (ScriptInstance* si = p_this->get_script_instance())
+        {
+            if (si->get_language() == GodotJSScriptLanguage::get_singleton())
+            {
+                ((GodotJSScriptInstance*) si)->update_class_id(p_class_id);
             }
         }
     }

@@ -143,6 +143,7 @@ public:
 
     void postbind();
     void cache_property(const StringName& name, const Variant& value);
+    void update_class_id(jsb::ScriptClassID p_class_id) { class_id_ = p_class_id; }
 
 #pragma region ScriptIntance Implementation
 
