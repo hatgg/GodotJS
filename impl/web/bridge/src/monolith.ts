@@ -295,14 +295,14 @@ class jsbb_Registry {
         const self = this;
         this.engine_opaque = engine_opaque;
         this.watcher = new FinalizationRegistry(function (internal_data) {
-            jsbb_console.debug("gc: released object (internal_data=" + internal_data + ")");
+            // jsbb_console.debug("gc: released object (internal_data=" + internal_data + ")");
             --self._count;
             _jsbb_.interop.gc_callback(self.engine_opaque, internal_data);
         });
     }
 
     Add(obj: any, internal_data: Pointer): void {
-        jsbb_console.debug("gc: registered object (internal_data=" + internal_data + ")");
+        // jsbb_console.debug("gc: registered object (internal_data=" + internal_data + ")");
 
         // opaque saved in obj[opaque.symbol] for GetOpaque(), it's never changed.
         obj[jsbb_opaque] = internal_data;
