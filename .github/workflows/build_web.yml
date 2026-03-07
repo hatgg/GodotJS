@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         engine: [ browser ]
-        target: [ template_debug ]
+        target: [ template_debug, template_release ]
         threads: [ "yes", "no" ]
         dlink: [ "no" ]
     steps:
