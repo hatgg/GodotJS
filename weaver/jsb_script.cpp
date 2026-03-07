@@ -230,7 +230,7 @@ Error GodotJSScript::reload(bool p_keep_state)
 
     //TODO different env has different module state, we need to refresh the state in all envs when marking a module as dirty somewhere
     jsb::ModuleReloadResult::Type result = env->mark_as_reloading(module_id);
-    if (result == jsb::ModuleReloadResult::None)
+    if (result == jsb::ModuleReloadResult::NoSuchModule)
     {
         JSB_LOG(Verbose, "Forcing reload for %s (mark_as_reloading returned None)", module_id);
         result = jsb::ModuleReloadResult::Requested;
