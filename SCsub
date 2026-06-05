@@ -465,6 +465,57 @@ module_obj = []
 print(f"godot engine: {version_info['major']}.{version_info['minor']}")
 check("regex" in env.module_list, "Currently, the 'regex' module is required for using GodotJS. Please rebuild the engine with it enabled.")
 
+# --- transpiler-ffi: SWC-based TypeScript transpiler (Rust staticlib) ----------
+# Compiles the crate under transpiler-ffi/ and exposes the FFI header to all
+# GodotJS C++ sources. Owns the `godotjs_transpile_ts()` entry point used by
+# the runtime loader to turn .ts source into CommonJS at load time.
+def rust_target_triple_for(platform, arch):
+    return {
+        ("macos",   "arm64"):  "aarch64-apple-darwin",
+        ("macos",   "x86_64"): "x86_64-apple-darwin",
+        ("linux",   "x86_64"): "x86_64-unknown-linux-gnu",
+        ("linux",   "arm64"):  "aarch64-unknown-linux-gnu",
+        ("windows", "x86_64"): "x86_64-pc-windows-msvc",
+        ("windows", "arm64"):  "aarch64-pc-windows-msvc",
+    }.get((platform, arch))
+
+def build_transpiler_ffi():
+    triple = rust_target_triple_for(jsb_platform, jsb_arch)
+    check(triple is not None,
+          f"transpiler-ffi: no Rust target triple mapped for {jsb_platform}/{jsb_arch}")
+
+    cargo = shutil.which("cargo")
+    check(cargo is not None,
+          "transpiler-ffi: 'cargo' not found on PATH — install the Rust toolchain (rustup.rs)")
+
+    manifest = "transpiler-ffi/Cargo.toml"
+    print_info(f"transpiler-ffi: cargo build --release --target {triple}")
+    rc = subprocess.run(
+        [cargo, "build", "--release", "--manifest-path", manifest, "--target", triple],
+        check=False,
+    )
+    check(rc.returncode == 0,
+          f"transpiler-ffi: cargo build failed (exit {rc.returncode})")
+
+    lib_name = "godotjs_transpiler_ffi.lib" if jsb_platform == "windows" else "libgodotjs_transpiler_ffi.a"
+    lib_path = f"transpiler-ffi/target/{triple}/release/{lib_name}"
+    check(os.path.exists(lib_path),
+          f"transpiler-ffi: expected staticlib at {lib_path} after cargo build")
+    return lib_path
+
+transpiler_ffi_lib = build_transpiler_ffi()
+env_jsb.Append(CPPPATH=[f"#modules/{module_name}/transpiler-ffi/include"])
+env.Append(LIBS=[File(transpiler_ffi_lib)])
+
+# Rust staticlibs may pull in platform frameworks/libs that Godot doesn't
+# already link. SWC's tree is mostly pure Rust; these covers the OS-specific
+# system bits its transitive deps reach for. Refine if the linker complains.
+if jsb_platform == "macos":
+    env.Append(LINKFLAGS=["-framework", "CoreFoundation", "-framework", "Security"])
+elif jsb_platform == "windows":
+    env.Append(LINKFLAGS=["userenv.lib", "ntdll.lib", "bcrypt.lib"])
+# -------------------------------------------------------------------------------
+
 # Build JS files before generating
 if not env["skip_js_runtime"]:
     pnpm_command = shutil.which("pnpm")
