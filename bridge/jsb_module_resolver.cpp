@@ -13,6 +13,11 @@ namespace jsb
     {
         // Transpile a TypeScript source into the same `(function(exports,require,module,__filename,__dirname){ ... \n})`
         // wrapper that `read_all_bytes_with_shebang` produces for `.js` sources.
+        // When SWC produced a sourcemap, the `//# sourceMappingURL=<data-url>`
+        // comment is inserted on its own line just before the closing `})`.
+        // Keeping the comment INSIDE the wrapper (not before it) preserves the
+        // body's line numbering relative to wrapped positions, so V8's stack
+        // frames map cleanly through the sourcemap for everything past line 0.
         bool transpile_typescript_to_wrapped_source(const String& p_asset_path,
                                                     const internal::ISourceReader& p_reader,
                                                     Vector<uint8_t>& o_wrapped,
@@ -20,6 +25,7 @@ namespace jsb
         {
             static constexpr char header[] = "(function(exports,require,module,__filename,__dirname){";
             static constexpr char footer[] = "\n})";
+            static constexpr char sourcemap_prefix[] = "\n//# sourceMappingURL=";
 
             const uint64_t raw_len = p_reader.get_length();
             Vector<uint8_t> raw;
@@ -50,14 +56,28 @@ namespace jsb
                 return false;
             }
 
+            const size_t header_size = ::std::size(header) - 1;
             const size_t code_len = result->code_len;
-            o_wrapped.resize((int) (code_len + ::std::size(header) + ::std::size(footer) - 2 + 1));
-            memcpy(o_wrapped.ptrw(), header, ::std::size(header) - 1);
+            const size_t sm_len = result->sourcemap ? result->sourcemap_len : 0;
+            const size_t sm_prefix_size = sm_len > 0 ? ::std::size(sourcemap_prefix) - 1 : 0;
+
+            o_wrapped.resize((int) (header_size + code_len + sm_prefix_size + sm_len + ::std::size(footer)));
+            size_t offset = 0;
+            memcpy(o_wrapped.ptrw() + offset, header, header_size);
+            offset += header_size;
             if (code_len > 0)
             {
-                memcpy(o_wrapped.ptrw() + ::std::size(header) - 1, result->code, code_len);
+                memcpy(o_wrapped.ptrw() + offset, result->code, code_len);
+                offset += code_len;
             }
-            memcpy(o_wrapped.ptrw() + ::std::size(header) - 1 + code_len, footer, ::std::size(footer));
+            if (sm_len > 0)
+            {
+                memcpy(o_wrapped.ptrw() + offset, sourcemap_prefix, sm_prefix_size);
+                offset += sm_prefix_size;
+                memcpy(o_wrapped.ptrw() + offset, result->sourcemap, sm_len);
+                offset += sm_len;
+            }
+            memcpy(o_wrapped.ptrw() + offset, footer, ::std::size(footer)); // includes trailing zero
 
             godotjs_free_transpile_result(result);
             return true;
