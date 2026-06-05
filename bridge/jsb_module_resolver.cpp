@@ -2,6 +2,7 @@
 #include "jsb_environment.h"
 
 #include "../internal/jsb_path_util.h"
+#include "core/crypto/crypto_core.h"
 
 extern "C" {
 #include "godotjs_transpiler.h"
@@ -18,7 +19,12 @@ namespace jsb
         // Keeping the comment INSIDE the wrapper (not before it) preserves the
         // body's line numbering relative to wrapped positions, so V8's stack
         // frames map cleanly through the sourcemap for everything past line 0.
-        bool transpile_typescript_to_wrapped_source(const String& p_asset_path,
+        // The decoded sourcemap is also fed into Environment::source_map_cache_
+        // so the V8 PrepareStackTrace callback can remap runtime Error.stack
+        // frames back to .ts positions (V8 12.4 doesn't auto-apply source maps
+        // to Error.stack, only DevTools).
+        bool transpile_typescript_to_wrapped_source(Environment* p_env,
+                                                    const String& p_source_url,
                                                     const internal::ISourceReader& p_reader,
                                                     Vector<uint8_t>& o_wrapped,
                                                     String& r_error)
@@ -36,7 +42,11 @@ namespace jsb
                 return false;
             }
 
-            const CharString filename_utf8 = p_asset_path.utf8();
+            // SWC's `sources` entry becomes the path SourceMapCache exposes when
+            // remapping stacks. Use the same string V8 will report in frames so
+            // a single key lookup hits in the cache (otherwise the bridge would
+            // pass `res://…` while V8 reports the absolute file path).
+            const CharString filename_utf8 = p_source_url.utf8();
             GodotJSTranspileResult* result = godotjs_transpile_ts(
                 raw.ptr(), (size_t) raw_len,
                 (const uint8_t*) filename_utf8.get_data(), (size_t) filename_utf8.length(),
@@ -78,6 +88,33 @@ namespace jsb
                 offset += sm_len;
             }
             memcpy(o_wrapped.ptrw() + offset, footer, ::std::size(footer)); // includes trailing zero
+
+            // Pull the base64 payload out of `data:application/json;…;base64,<b64>`
+            // and feed the decoded JSON into the source map cache so runtime stack
+            // remap can find it by the same key V8 will report.
+            if (p_env && sm_len > 0)
+            {
+                const uint8_t* url = result->sourcemap;
+                size_t url_len = result->sourcemap_len;
+                const uint8_t* comma = (const uint8_t*) memchr(url, ',', url_len);
+                if (comma)
+                {
+                    const size_t b64_off = (comma - url) + 1;
+                    if (url_len > b64_off)
+                    {
+                        const uint8_t* b64_ptr = url + b64_off;
+                        const size_t b64_len = url_len - b64_off;
+                        Vector<uint8_t> json_buf;
+                        json_buf.resize((int) (b64_len * 3 / 4 + 4));
+                        size_t out_len = 0;
+                        if (CryptoCore::b64_decode(json_buf.ptrw(), (size_t) json_buf.size(), &out_len, b64_ptr, b64_len) == OK && out_len > 0)
+                        {
+                            const String json = String::utf8((const char*) json_buf.ptr(), (int) out_len);
+                            p_env->get_source_map_cache().feed(p_source_url, json);
+                        }
+                    }
+                }
+            }
 
             godotjs_free_transpile_result(result);
             return true;
@@ -678,7 +715,7 @@ namespace jsb
             if (is_typescript)
             {
                 String transpile_error;
-                if (!transpile_typescript_to_wrapped_source(p_asset_path, p_reader, source, transpile_error))
+                if (!transpile_typescript_to_wrapped_source(p_env, source_url, p_reader, source, transpile_error))
                 {
                     JSB_LOG(Error, "ts transpile failed for %s: %s", p_asset_path, transpile_error);
                     impl::Helper::throw_error(isolate, jsb_format("ts transpile failed for %s: %s", p_asset_path, transpile_error));
