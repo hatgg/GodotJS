@@ -532,7 +532,15 @@ namespace jsb
             return this->check_absolute_file_path(internal::PathUtil::combine(p_package_path, p_module_id), o_source_info);
         }
 
-        const String relative_exported_path = resolve_package_export(package_exports, "require", p_module_id);
+        // Try the CJS-runtime condition first (matches Node's behavior for `require`).
+        // Workspace packages that ship TS source typically declare only `types` / `import`
+        // (no `require` / `default`), so fall back to `import` before giving up. SWC's
+        // common_js transform makes ESM-source modules loadable via CJS regardless.
+        String relative_exported_path = resolve_package_export(package_exports, "require", p_module_id);
+        if (relative_exported_path.is_empty())
+        {
+            relative_exported_path = resolve_package_export(package_exports, "import", p_module_id);
+        }
 
         if (relative_exported_path.is_empty())
         {
