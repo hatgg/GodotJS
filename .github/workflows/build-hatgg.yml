@@ -133,7 +133,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ github.workspace }}/modules/GodotJS/transpiler-ffi
-          shared-key: hatgg-macos
+          shared-key: hatgg-macos-${{ hashFiles('modules/GodotJS/transpiler-ffi/Cargo.toml') }}
 
       - name: Download AccessKit v18 [4.6]
         if: needs.prep.outputs.version_mm == '4.6'
@@ -263,7 +263,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ github.workspace }}/modules/GodotJS/transpiler-ffi
-          shared-key: hatgg-linux
+          shared-key: hatgg-linux-${{ hashFiles('modules/GodotJS/transpiler-ffi/Cargo.toml') }}
 
       - name: Download AccessKit v18 [4.6]
         if: needs.prep.outputs.version_mm == '4.6'
@@ -361,7 +361,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ github.workspace }}/modules/GodotJS/transpiler-ffi
-          shared-key: hatgg-windows
+          shared-key: hatgg-windows-${{ hashFiles('modules/GodotJS/transpiler-ffi/Cargo.toml') }}
 
       - name: Download D3D12 SDK
         id: d3d12-sdk
