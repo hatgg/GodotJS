@@ -31,9 +31,3 @@ swc_core = { version = "37", features = [
 opt-level = 3
 lto = true
 codegen-units = 1
-# Strip rust_eh_personality from our staticlib so it doesn't clash with the
-# same symbol in Godot's prebuilt accesskit Rust staticlib at link time
-# (GNU ld + MSVC link.exe are strict; macOS ld64 silently picks one). We
-# don't catch_unwind across the FFI boundary anyway — a SWC panic today is
-# undefined behavior, abort is strictly safer.
-panic = "abort"
