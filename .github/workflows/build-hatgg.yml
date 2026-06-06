@@ -1,0 +1,517 @@
+name: 🚀 Hatgg Build & Publish
+
+# Builds GodotJS editor + export templates per platform and publishes them to
+# the godotjs S3 bucket (hat-owned) and a GitHub Release. Fires on push of a
+# tag shaped like `v<godotjs-release>-<godot-version>-hatgg.<N>`, e.g.
+# `v1.1.0.beta1-4.6.1-hatgg.1`. Hat-side `bun setup --hatgg` resolves the
+# bucket path `<base>/<version_mm>-hatgg/{editor,export_templates}/...`.
+#
+# Only v8 is built (hat exclusively uses v8). Mac is universal (arm64+x86_64
+# lipo). Linux + Windows are x86_64. Templates ship release+debug. Mac
+# binaries ship UNSIGNED — see NEXT_STEPS.html "codesigning" TODO.
+
+on:
+  push:
+    tags:
+      - 'v*-hatgg.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to rebuild (e.g. v1.1.0.beta1-4.6.1-hatgg.1)'
+        required: true
+        type: string
+
+env:
+  # Ideally dev_mode=yes but v8 headers warn; mirror upstream's manual subset.
+  SCONS_FLAGS: >-
+    verbose=yes
+    warnings=extra
+    strict_checks=yes
+    module_text_server_fb_enabled=yes
+    skip_js_runtime=yes
+
+jobs:
+  prep:
+    name: 🔖 Parse tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.parse.outputs.tag }}
+      version: ${{ steps.parse.outputs.version }}
+      version_mm: ${{ steps.parse.outputs.version_mm }}
+      version_ref: ${{ steps.parse.outputs.version_ref }}
+      hatgg_path: ${{ steps.parse.outputs.hatgg_path }}
+    steps:
+      - id: parse
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          # Tag shape: v<godotjs_release>-<godot_version>-hatgg.<N>
+          # e.g. v1.1.0.beta1-4.6.1-hatgg.1 → version=4.6.1, version_mm=4.6
+          BASE="${TAG#v}"
+          STRIPPED="${BASE%-hatgg.*}"
+          VERSION="${STRIPPED##*-}"
+          VERSION_MM="$(echo "$VERSION" | cut -d. -f1,2)"
+          # Map godot version → upstream godotengine/godot ref. Extend when
+          # adding a new line (e.g. 4.7).
+          case "$VERSION" in
+            4.6.1) VERSION_REF="4.6.1-stable" ;;
+            *) echo "Unknown godot version '$VERSION' — extend the prep.parse mapping"; exit 1 ;;
+          esac
+          HATGG_PATH="${VERSION_MM}-hatgg"
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "version_mm=$VERSION_MM"
+            echo "version_ref=$VERSION_REF"
+            echo "hatgg_path=$HATGG_PATH"
+          } >> "$GITHUB_OUTPUT"
+          echo "Parsed: tag=$TAG version=$VERSION version_mm=$VERSION_MM ref=$VERSION_REF s3_path=$HATGG_PATH"
+
+  environment:
+    name: 🌳 Build scripts/out
+    needs: prep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prep.outputs.tag }}
+      - uses: ./.github/actions/pnpm-install
+      - name: pnpm build
+        run: pnpm build
+        shell: bash
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scripts-out
+          path: ${{ github.workspace }}/scripts/out
+          retention-days: 7
+
+  build-macos:
+    name: 🍎 macOS (${{ matrix.target }})
+    needs: [prep, environment]
+    runs-on: macos-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [editor, template_release, template_debug]
+    steps:
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.0.1.app
+
+      - name: Checkout Godot
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.prep.outputs.version_ref }}
+          submodules: recursive
+
+      - name: Checkout GodotJS (hatgg)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prep.outputs.tag }}
+          path: ${{ github.workspace }}/modules/GodotJS/
+          lfs: true
+          submodules: recursive
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: hatgg-macos-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Setup Rust mac targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Cache transpiler-ffi cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ github.workspace }}/modules/GodotJS/transpiler-ffi
+          shared-key: hatgg-macos
+
+      - name: Download AccessKit v18 [4.6]
+        if: needs.prep.outputs.version_mm == '4.6'
+        uses: dsaltares/fetch-gh-release-asset@1.1.2
+        with:
+          repo: AccessKit/accesskit-c
+          version: tags/0.18.0
+          file: accesskit-c-0.18.0.zip
+          target: accesskit-c-0.18.0/accesskit_c.zip
+
+      - name: Extract AccessKit v18 [4.6]
+        if: needs.prep.outputs.version_mm == '4.6'
+        run: unzip -o accesskit-c-0.18.0/accesskit_c.zip
+
+      - name: Setup Vulkan SDK
+        id: vulkan-sdk
+        run: |
+          if sh misc/scripts/install_vulkan_sdk_macos.sh; then
+            echo "VULKAN_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Vulkan SDK install failed; building without."
+            echo "VULKAN_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+        continue-on-error: true
+
+      - name: Download scripts/out
+        uses: actions/download-artifact@v8
+        with:
+          name: scripts-out
+          path: ${{ github.workspace }}/modules/GodotJS/scripts/out
+
+      - name: Compile x86_64
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: >-
+            ${{ env.SCONS_FLAGS }}
+            "accesskit_sdk_path=${{ github.workspace }}/accesskit-c-0.18.0/"
+            ${{ matrix.target != 'editor' && 'debug_symbols=no' || '' }}
+            arch=x86_64
+            vulkan=${{ steps.vulkan-sdk.outputs.VULKAN_ENABLED }}
+          platform: macos
+          target: ${{ matrix.target }}
+
+      - name: Compile arm64
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: >-
+            ${{ env.SCONS_FLAGS }}
+            "accesskit_sdk_path=${{ github.workspace }}/accesskit-c-0.18.0/"
+            ${{ matrix.target != 'editor' && 'debug_symbols=no' || '' }}
+            arch=arm64
+            vulkan=${{ steps.vulkan-sdk.outputs.VULKAN_ENABLED }}
+          platform: macos
+          target: ${{ matrix.target }}
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: hatgg-macos-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: lipo to universal + strip
+        run: |
+          set -euo pipefail
+          lipo -create \
+            ./bin/godot.macos.${{ matrix.target }}.x86_64 \
+            ./bin/godot.macos.${{ matrix.target }}.arm64 \
+            -output ./bin/godot.macos.${{ matrix.target }}.universal
+          rm ./bin/godot.macos.${{ matrix.target }}.x86_64 ./bin/godot.macos.${{ matrix.target }}.arm64
+          rm -rf ./bin/build_deps
+          strip ./bin/godot.macos.${{ matrix.target }}.universal
+          chmod +x ./bin/godot.macos.${{ matrix.target }}.universal
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-${{ matrix.target }}
+          path: ${{ github.workspace }}/bin/godot.macos.${{ matrix.target }}.universal
+          retention-days: 3
+
+  build-linux:
+    name: 🐧 Linux (${{ matrix.target }})
+    needs: [prep, environment]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [editor, template_release, template_debug]
+    steps:
+      - name: Checkout Godot
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.prep.outputs.version_ref }}
+          submodules: recursive
+
+      - name: Checkout GodotJS (hatgg)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prep.outputs.tag }}
+          path: ${{ github.workspace }}/modules/GodotJS/
+          lfs: true
+          submodules: recursive
+
+      - name: Install OS deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-bin
+          if [ "${{ matrix.target }}" = "editor" ]; then
+            sudo apt-get install -y mesa-vulkan-drivers
+          fi
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/local/lib/android
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: hatgg-linux-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Cache transpiler-ffi cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ github.workspace }}/modules/GodotJS/transpiler-ffi
+          shared-key: hatgg-linux
+
+      - name: Download AccessKit v18 [4.6]
+        if: needs.prep.outputs.version_mm == '4.6'
+        uses: dsaltares/fetch-gh-release-asset@1.1.2
+        with:
+          repo: AccessKit/accesskit-c
+          version: tags/0.18.0
+          file: accesskit-c-0.18.0.zip
+          target: accesskit-c-0.18.0/accesskit_c.zip
+
+      - name: Extract AccessKit v18 [4.6]
+        if: needs.prep.outputs.version_mm == '4.6'
+        run: unzip -o accesskit-c-0.18.0/accesskit_c.zip
+
+      - name: Download scripts/out
+        uses: actions/download-artifact@v8
+        with:
+          name: scripts-out
+          path: ${{ github.workspace }}/modules/GodotJS/scripts/out
+
+      - name: Compile
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: >-
+            ${{ env.SCONS_FLAGS }}
+            "accesskit_sdk_path=${{ github.workspace }}/accesskit-c-0.18.0/"
+            ${{ matrix.target != 'editor' && 'debug_symbols=no' || '' }}
+          platform: linuxbsd
+          target: ${{ matrix.target }}
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: hatgg-linux-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: Prepare binary
+        run: |
+          set -euo pipefail
+          rm -rf ./bin/build_deps
+          strip ./bin/godot.linuxbsd.${{ matrix.target }}.x86_64
+          chmod +x ./bin/godot.linuxbsd.${{ matrix.target }}.x86_64
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.target }}
+          path: ${{ github.workspace }}/bin/godot.linuxbsd.${{ matrix.target }}.x86_64
+          retention-days: 3
+
+  build-windows:
+    name: 🏁 Windows (${{ matrix.target }})
+    needs: [prep, environment]
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [editor, template_release, template_debug]
+    env:
+      SCONS_CACHE_MSVC_CONFIG: true
+      PYTHONIOENCODING: utf8
+    steps:
+      - name: Checkout Godot
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.prep.outputs.version_ref }}
+          submodules: recursive
+
+      - name: Checkout GodotJS (hatgg)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prep.outputs.tag }}
+          path: ${{ github.workspace }}/modules/GodotJS/
+          lfs: true
+          submodules: recursive
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: hatgg-windows-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: Download scripts/out
+        uses: actions/download-artifact@v8
+        with:
+          name: scripts-out
+          path: ${{ github.workspace }}/modules/GodotJS/scripts/out
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Cache transpiler-ffi cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ github.workspace }}/modules/GodotJS/transpiler-ffi
+          shared-key: hatgg-windows
+
+      - name: Download D3D12 SDK
+        id: d3d12-sdk
+        shell: sh
+        run: |
+          if python ./misc/scripts/install_d3d12_sdk_windows.py; then
+            echo "D3D12_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Direct3D 12 SDK install failed; building without."
+            echo "D3D12_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+        continue-on-error: true
+
+      - name: Download ANGLE static libs
+        uses: dsaltares/fetch-gh-release-asset@1.1.2
+        with:
+          repo: godotengine/godot-angle-static
+          version: tags/chromium/6601.2
+          file: godot-angle-static-x86_64-msvc-release.zip
+          target: angle/angle.zip
+
+      - name: Extract ANGLE
+        run: Expand-Archive -Force angle/angle.zip ${{ github.workspace }}/
+
+      - name: Download AccessKit v18 [4.6]
+        if: needs.prep.outputs.version_mm == '4.6'
+        uses: dsaltares/fetch-gh-release-asset@1.1.2
+        with:
+          repo: AccessKit/accesskit-c
+          version: tags/0.18.0
+          file: accesskit-c-0.18.0.zip
+          target: accesskit-c-0.18.0/accesskit_c.zip
+
+      - name: Extract AccessKit v18 [4.6]
+        if: needs.prep.outputs.version_mm == '4.6'
+        run: unzip -o accesskit-c-0.18.0/accesskit_c.zip
+
+      - name: Compile
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: >-
+            ${{ env.SCONS_FLAGS }}
+            debug_symbols=no
+            d3d12=yes
+            "angle_libs=${{ github.workspace }}/"
+            "accesskit_sdk_path=${{ github.workspace }}/accesskit-c-0.18.0/"
+          platform: windows
+          target: ${{ matrix.target }}
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: hatgg-windows-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: Clean intermediate files
+        run: Remove-Item bin/* -Include *.exp,*.lib,*.pdb -Force
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-${{ matrix.target }}
+          path: ${{ github.workspace }}/bin/godot.windows.${{ matrix.target }}.x86_64.exe
+          retention-days: 3
+
+  publish:
+    name: 🦅 Publish to S3 + GitHub Release
+    needs: [prep, build-macos, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Godot (for macos_template.app skeleton)
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.prep.outputs.version_ref }}
+          path: godot
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Repackage into hat-side layout
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          # macOS editor: raw universal binary inside macos_editor.zip
+          (cd artifacts/macos-editor && zip -j "$GITHUB_WORKSPACE/out/macos_editor.zip" godot.macos.editor.universal)
+
+          # macOS templates: ship a macos_template.app bundle containing both
+          # debug + release. The .app skeleton lives in upstream's misc/dist/.
+          mkdir -p template-app
+          cp -r godot/misc/dist/macos_template.app template-app/macos_template.app
+          mkdir -p template-app/macos_template.app/Contents/MacOS
+          cp artifacts/macos-template_release/godot.macos.template_release.universal \
+            template-app/macos_template.app/Contents/MacOS/godot_macos_release.universal
+          cp artifacts/macos-template_debug/godot.macos.template_debug.universal \
+            template-app/macos_template.app/Contents/MacOS/godot_macos_debug.universal
+          chmod +x template-app/macos_template.app/Contents/MacOS/godot_macos_release.universal
+          chmod +x template-app/macos_template.app/Contents/MacOS/godot_macos_debug.universal
+          (cd template-app && zip -r "$GITHUB_WORKSPACE/out/macos_template.zip" macos_template.app)
+
+          # Linux: editor + per-target templates, raw binaries.
+          (cd artifacts/linux-editor && zip -j "$GITHUB_WORKSPACE/out/linux_editor.zip" godot.linuxbsd.editor.x86_64)
+          (cd artifacts/linux-template_release && zip -j "$GITHUB_WORKSPACE/out/linux_release.zip" godot.linuxbsd.template_release.x86_64)
+          (cd artifacts/linux-template_debug && zip -j "$GITHUB_WORKSPACE/out/linux_debug.zip" godot.linuxbsd.template_debug.x86_64)
+
+          # Windows: editor + per-target templates.
+          (cd artifacts/windows-editor && zip -j "$GITHUB_WORKSPACE/out/windows_editor.zip" godot.windows.editor.x86_64.exe)
+          (cd artifacts/windows-template_release && zip -j "$GITHUB_WORKSPACE/out/windows_release.zip" godot.windows.template_release.x86_64.exe)
+          (cd artifacts/windows-template_debug && zip -j "$GITHUB_WORKSPACE/out/windows_debug.zip" godot.windows.template_debug.x86_64.exe)
+
+          echo "Built artifacts:"
+          ls -la out/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload to S3
+        run: |
+          set -euo pipefail
+          S3_BASE="s3://godotjs/${{ needs.prep.outputs.hatgg_path }}"
+          aws s3 cp out/macos_editor.zip      "$S3_BASE/editor/macos_editor.zip"
+          aws s3 cp out/linux_editor.zip      "$S3_BASE/editor/linux_editor.zip"
+          aws s3 cp out/windows_editor.zip    "$S3_BASE/editor/windows_editor.zip"
+          aws s3 cp out/macos_template.zip    "$S3_BASE/export_templates/macos_template.zip"
+          aws s3 cp out/linux_release.zip     "$S3_BASE/export_templates/linux_release.zip"
+          aws s3 cp out/linux_debug.zip       "$S3_BASE/export_templates/linux_debug.zip"
+          aws s3 cp out/windows_release.zip   "$S3_BASE/export_templates/windows_release.zip"
+          aws s3 cp out/windows_debug.zip     "$S3_BASE/export_templates/windows_debug.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prep.outputs.tag }}
+          name: ${{ needs.prep.outputs.tag }}
+          files: out/*.zip
+          generate_release_notes: true
+          body: |
+            Hatgg build of GodotJS for godot ${{ needs.prep.outputs.version }}.
+
+            S3: `s3://godotjs/${{ needs.prep.outputs.hatgg_path }}/`
+            Hat-side: `bun setup --version ${{ needs.prep.outputs.version_mm }} --hatgg`
+
+            **Note**: macOS binaries are UNSIGNED. First run requires
+            `xattr -d com.apple.quarantine <path>` to clear Gatekeeper.
