@@ -1156,7 +1156,7 @@ namespace jsb
             // rebind live instances.
             if (module->mark_as_reloading())
             {
-                JSB_LOG(Log, "[transitive-reload] marked dirty: %s (is_script=%d)", module->id, (int)(bool)module->script_class_id);
+                JSB_LOG(Verbose, "[reload] marked dirty: %s (is_script=%d)", module->id, (int)(bool)module->script_class_id);
                 requested_modules.append(module->id);
                 dirty_set.insert(module->id);
             }
@@ -1198,7 +1198,7 @@ namespace jsb
                 }
                 if (depends_on_dirty)
                 {
-                    JSB_LOG(Log, "[transitive-reload] cascaded dirty: %s (depends on a dirty module)", module->id);
+                    JSB_LOG(Verbose, "[reload] cascaded dirty: %s (depends on a dirty module)", module->id);
                     module->force_mark_as_reloading();
                     requested_modules.append(module->id);
                     dirty_set.insert(module->id);
@@ -1209,7 +1209,7 @@ namespace jsb
 
         for (const StringName& id : requested_modules)
         {
-            JSB_LOG(Log, "[transitive-reload] reloading via load(): %s", id);
+            JSB_LOG(Verbose, "[reload] reloading via load(): %s", id);
             load(id);
         }
         return requested_modules;

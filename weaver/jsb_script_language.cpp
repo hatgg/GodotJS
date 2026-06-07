@@ -414,9 +414,18 @@ String GodotJSScriptLanguage::get_type() const
 
 void GodotJSScriptLanguage::scan_external_changes()
 {
-    JSB_LOG(Log, "[transitive-reload] GodotJSScriptLanguage::scan_external_changes ENTRY");
+    JSB_LOG(Verbose, "[reload] GodotJSScriptLanguage::scan_external_changes ENTRY");
     const Vector<StringName> reloaded = environment_->scan_external_changes();
-    JSB_LOG(Log, "[transitive-reload] env scan returned %d ids", reloaded.size());
+    JSB_LOG(Verbose, "[reload] env scan returned %d ids", reloaded.size());
+    if (reloaded.is_empty()) return;
+
+    // Build a set of reloaded module ids so we can narrow the rebind set to
+    // only the scripts whose module (or one of its transitive dependencies)
+    // actually changed. env's scan body already cascaded dirty marks through
+    // the children graph (see jsb_environment.cpp), so any script that needs
+    // a fresh prototype is in this set.
+    HashSet<StringName> reloaded_set;
+    for (const StringName& id : reloaded) reloaded_set.insert(id);
 
     // Snapshot script_list_ under the lock, then release before calling into
     // GodotJSScript methods that reacquire the same mutex (load_module_immediately's
@@ -433,6 +442,7 @@ void GodotJSScriptLanguage::scan_external_changes()
         }
     }
 
+    int rebound = 0;
     for (const Ref<GodotJSScript>& script : snapshot)
     {
 #ifdef TOOLS_ENABLED
@@ -440,15 +450,14 @@ void GodotJSScriptLanguage::scan_external_changes()
         // get re-attached on the next scan
         script->load_module_if_missing();
 #endif
-        // If env scan reloaded ANY module, force-rebind every script.
-        // Precise dependency tracking is a follow-up — for now the
-        // over-approximation catches the transitive case (e.g. an abstract
-        // mixin whose dependents wouldn't otherwise be re-executed).
-        if (!reloaded.is_empty())
+        if (reloaded_set.has(script->get_module_id()))
         {
             script->force_reload_for_scan();
+            rebound++;
         }
     }
+    JSB_LOG(Verbose, "[reload] rebound %d/%d scripts (skipped %d not in dirty set)",
+        rebound, (int) snapshot.size(), (int) snapshot.size() - rebound);
 
     // Inspector refresh: GodotJSScript::force_reload_for_scan emits the
     // standard Script::changed signal which the editor inspector listens to.
