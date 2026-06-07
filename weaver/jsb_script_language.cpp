@@ -414,20 +414,35 @@ String GodotJSScriptLanguage::get_type() const
 
 void GodotJSScriptLanguage::scan_external_changes()
 {
-    environment_->scan_external_changes();
+    const Vector<StringName> reloaded = environment_->scan_external_changes();
 
-#ifdef TOOLS_ENABLED
-    // fix scripts with no .js counterpart found (only missing scripts)
     {
         MutexLock lock(mutex_);
         const SelfList<GodotJSScript>* elem = script_list_.first();
         while (elem)
         {
-            elem->self()->load_module_if_missing();
+            GodotJSScript* script = elem->self();
             elem = elem->next();
+#ifdef TOOLS_ENABLED
+            // editor-only safety net: scripts whose .js counterpart was deleted
+            // get re-attached on the next scan
+            script->load_module_if_missing();
+#endif
+            // If env scan reloaded ANY module, force-rebind every script.
+            // Precise dependency tracking is a follow-up — for now the
+            // over-approximation catches the transitive case (e.g. an abstract
+            // mixin whose dependents wouldn't otherwise be re-executed).
+            if (!reloaded.is_empty())
+            {
+                script->force_reload_for_scan();
+            }
         }
     }
-#endif
+
+    // Inspector refresh: GodotJSScript::force_reload_for_scan emits the
+    // standard Script::changed signal which the editor inspector listens to.
+    // This removes the need for the userland node-registrar polling that
+    // previously called refresh_inspector() manually.
 }
 
 void GodotJSScriptLanguage::thread_enter()
