@@ -614,6 +614,7 @@ void GodotJSScript::load_module_immediately()
 
 void GodotJSScript::force_reload_for_scan()
 {
+    JSB_LOG(Log, "[transitive-reload] force_reload_for_scan %s loaded=%d valid=%d", get_path(), (int)loaded_, (int)_is_valid());
     // No live module yet — nothing to rebind. Next access will trigger
     // ensure_module_loaded() and pick up whatever the env scan loaded.
     if (!loaded_) return;

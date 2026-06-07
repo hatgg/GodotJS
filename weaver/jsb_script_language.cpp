@@ -414,7 +414,9 @@ String GodotJSScriptLanguage::get_type() const
 
 void GodotJSScriptLanguage::scan_external_changes()
 {
+    JSB_LOG(Log, "[transitive-reload] GodotJSScriptLanguage::scan_external_changes ENTRY");
     const Vector<StringName> reloaded = environment_->scan_external_changes();
+    JSB_LOG(Log, "[transitive-reload] env scan returned %d ids", reloaded.size());
 
     // Snapshot script_list_ under the lock, then release before calling into
     // GodotJSScript methods that reacquire the same mutex (load_module_immediately's
