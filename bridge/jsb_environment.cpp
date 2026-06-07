@@ -1140,7 +1140,14 @@ namespace jsb
     Vector<StringName> Environment::scan_external_changes()
     {
         check_internal_state();
+        v8::Isolate* isolate = isolate_;
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+        v8::Local<v8::Context> context = context_.Get(isolate);
+        v8::Context::Scope context_scope(context);
+
         Vector<StringName> requested_modules;
+        HashSet<StringName> dirty_set;
         for (const KeyValue<StringName, JavaScriptModule*>& kv : module_cache_.modules_)
         {
             JavaScriptModule* module = kv.value;
@@ -1151,6 +1158,52 @@ namespace jsb
             {
                 JSB_LOG(Log, "[transitive-reload] marked dirty: %s (is_script=%d)", module->id, (int)(bool)module->script_class_id);
                 requested_modules.append(module->id);
+                dirty_set.insert(module->id);
+            }
+        }
+
+        // Transitive invalidation: any module whose `children` array contains a
+        // dirty module is also dirty. Fixed-point iterate over the module graph.
+        // children is a v8 Array stored on the module object (see line 1353 where
+        // it's built during initial load); each entry is another module object
+        // with an `id` property.
+        const v8::Local<v8::Name> children_name = jsb_name(this, children);
+        const v8::Local<v8::Name> id_name = jsb_name(this, id);
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (const KeyValue<StringName, JavaScriptModule*>& kv : module_cache_.modules_)
+            {
+                JavaScriptModule* module = kv.value;
+                if (dirty_set.has(module->id)) continue;
+                const v8::Local<v8::Object> module_obj = module->module.Get(isolate);
+                v8::Local<v8::Value> children_val;
+                if (!module_obj->Get(context, children_name).ToLocal(&children_val) || !children_val->IsArray()) continue;
+                const v8::Local<v8::Array> children = children_val.As<v8::Array>();
+                const uint32_t count = children->Length();
+                bool depends_on_dirty = false;
+                for (uint32_t i = 0; i < count; i++)
+                {
+                    v8::Local<v8::Value> child_val;
+                    if (!children->Get(context, i).ToLocal(&child_val) || !child_val->IsObject()) continue;
+                    v8::Local<v8::Value> child_id_val;
+                    if (!child_val.As<v8::Object>()->Get(context, id_name).ToLocal(&child_id_val) || !child_id_val->IsString()) continue;
+                    const String child_id_str = impl::Helper::to_string(isolate, child_id_val);
+                    if (dirty_set.has(StringName(child_id_str)))
+                    {
+                        depends_on_dirty = true;
+                        break;
+                    }
+                }
+                if (depends_on_dirty)
+                {
+                    JSB_LOG(Log, "[transitive-reload] cascaded dirty: %s (depends on a dirty module)", module->id);
+                    module->force_mark_as_reloading();
+                    requested_modules.append(module->id);
+                    dirty_set.insert(module->id);
+                    changed = true;
+                }
             }
         }
 
@@ -1291,6 +1344,20 @@ namespace jsb
 
                     JSB_LOG(VeryVerbose, "reload module %s", module_id);
                     resolved_module->mark_as_reloaded();
+
+                    // Reset `exports` to a fresh Object before re-running the
+                    // wrapped source. SWC's CJS output for `export default class`
+                    // uses `Object.defineProperty(exports, "default", { configurable: false, ... })`
+                    // which throws "Cannot redefine property" on the second run
+                    // when the OLD non-configurable "default" still sits on exports.
+                    // Without this reset, the reload silently fails for any module
+                    // that uses ES-module-style exports (i.e. nearly everything).
+                    {
+                        v8::Local<v8::Object> fresh_exports = v8::Object::New(isolate);
+                        const v8::Local<v8::Object> module_obj = resolved_module->module.Get(isolate);
+                        module_obj->Set(context, jsb_name(this, exports), fresh_exports).Check();
+                        resolved_module->exports.Reset(isolate, fresh_exports);
+                    }
                     if (!resolver->load(this, source_info.source_filepath, *resolved_module))
                     {
                         return nullptr;
