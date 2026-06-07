@@ -22,6 +22,7 @@ export default class Start extends Node {
                 "res://tests/os-executor/OSExecutor.tscn",
                 "res://tests/worker/Worker.tscn",
                 "res://tests/reload/Reload.tscn",
+                "res://tests/reload/ScriptClassReload.tscn",
                 "res://tests/workspace/Workspace.tscn",
             ];
 
