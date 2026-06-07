@@ -416,26 +416,35 @@ void GodotJSScriptLanguage::scan_external_changes()
 {
     const Vector<StringName> reloaded = environment_->scan_external_changes();
 
+    // Snapshot script_list_ under the lock, then release before calling into
+    // GodotJSScript methods that reacquire the same mutex (load_module_immediately's
+    // rebind loop locks mutex_ around instances_). The list elements outlive the
+    // lock because scripts are Refcounted and the language owns this list.
+    Vector<Ref<GodotJSScript>> snapshot;
     {
         MutexLock lock(mutex_);
         const SelfList<GodotJSScript>* elem = script_list_.first();
         while (elem)
         {
-            GodotJSScript* script = elem->self();
+            snapshot.push_back(Ref<GodotJSScript>(elem->self()));
             elem = elem->next();
+        }
+    }
+
+    for (const Ref<GodotJSScript>& script : snapshot)
+    {
 #ifdef TOOLS_ENABLED
-            // editor-only safety net: scripts whose .js counterpart was deleted
-            // get re-attached on the next scan
-            script->load_module_if_missing();
+        // editor-only safety net: scripts whose .js counterpart was deleted
+        // get re-attached on the next scan
+        script->load_module_if_missing();
 #endif
-            // If env scan reloaded ANY module, force-rebind every script.
-            // Precise dependency tracking is a follow-up — for now the
-            // over-approximation catches the transitive case (e.g. an abstract
-            // mixin whose dependents wouldn't otherwise be re-executed).
-            if (!reloaded.is_empty())
-            {
-                script->force_reload_for_scan();
-            }
+        // If env scan reloaded ANY module, force-rebind every script.
+        // Precise dependency tracking is a follow-up — for now the
+        // over-approximation catches the transitive case (e.g. an abstract
+        // mixin whose dependents wouldn't otherwise be re-executed).
+        if (!reloaded.is_empty())
+        {
+            script->force_reload_for_scan();
         }
     }
 
