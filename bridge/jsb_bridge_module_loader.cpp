@@ -3,6 +3,7 @@
 #include "jsb_editor_utility_funcs.h"
 #include "jsb_callable.h"
 #include "jsb_object_bindings.h"
+#include "../weaver/jsb_script_language.h"
 
 namespace jsb
 {
@@ -488,7 +489,18 @@ namespace jsb
         {
             Environment* env = Environment::wrap(info.GetIsolate());
             jsb_check(env);
-            (void) env->scan_external_changes();
+            // Prefer the language wrapper so script-bearing modules get their
+            // live instances rebound after the env reload. Fall back to env
+            // alone if the language singleton isn't initialised (unusual,
+            // headless-jsb-only builds).
+            if (GodotJSScriptLanguage* lang = GodotJSScriptLanguage::get_singleton())
+            {
+                lang->scan_external_changes();
+            }
+            else
+            {
+                (void) env->scan_external_changes();
+            }
         }
 
         void _add_module(const v8::FunctionCallbackInfo<v8::Value>& info)
