@@ -488,7 +488,7 @@ namespace jsb
         {
             Environment* env = Environment::wrap(info.GetIsolate());
             jsb_check(env);
-            env->scan_external_changes();
+            (void) env->scan_external_changes();
         }
 
         void _add_module(const v8::FunctionCallbackInfo<v8::Value>& info)

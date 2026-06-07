@@ -1137,15 +1137,16 @@ namespace jsb
         return new_id;
     }
 
-    void Environment::scan_external_changes()
+    Vector<StringName> Environment::scan_external_changes()
     {
         check_internal_state();
         Vector<StringName> requested_modules;
         for (const KeyValue<StringName, JavaScriptModule*>& kv : module_cache_.modules_)
         {
             JavaScriptModule* module = kv.value;
-            // skip script modules which are managed by the godot editor
-            if (module->script_class_id) continue;
+            // include script-bearing modules so editor + game both pick up
+            // .ts edits; GodotJSScriptLanguage uses the returned ids to
+            // rebind live instances.
             if (module->mark_as_reloading())
             {
                 requested_modules.append(module->id);
@@ -1157,6 +1158,7 @@ namespace jsb
             JSB_LOG(Verbose, "changed module check: %s", id);
             load(id);
         }
+        return requested_modules;
     }
 
     ModuleReloadResult::Type Environment::mark_as_reloading(const StringName& p_name)
