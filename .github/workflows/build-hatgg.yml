@@ -195,7 +195,7 @@ jobs:
           cache-name: hatgg-macos-${{ matrix.target }}-${{ needs.prep.outputs.version }}
         continue-on-error: true
 
-      - name: lipo to universal + strip
+      - name: lipo to universal + strip + ad-hoc codesign
         run: |
           set -euo pipefail
           lipo -create \
@@ -206,6 +206,10 @@ jobs:
           rm -rf ./bin/build_deps
           strip ./bin/godot.macos.${{ matrix.target }}.universal
           chmod +x ./bin/godot.macos.${{ matrix.target }}.universal
+          codesign --force --sign - --timestamp=none \
+            ./bin/godot.macos.${{ matrix.target }}.universal
+          codesign --verify --verbose=2 \
+            ./bin/godot.macos.${{ matrix.target }}.universal
 
       - name: Upload binary
         uses: actions/upload-artifact@v7
@@ -513,5 +517,6 @@ jobs:
             S3: `s3://godotjs/${{ needs.prep.outputs.hatgg_path }}/`
             Hat-side: `bun setup --version ${{ needs.prep.outputs.version_mm }} --hatgg`
 
-            **Note**: macOS binaries are UNSIGNED. First run requires
-            `xattr -d com.apple.quarantine <path>` to clear Gatekeeper.
+            **Note**: macOS binaries are ad-hoc signed (no Developer ID). Curl
+            downloads run as-is; browser/Slack downloads still need
+            `xattr -d com.apple.quarantine <path>` once per file.
