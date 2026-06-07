@@ -1149,13 +1149,14 @@ namespace jsb
             // rebind live instances.
             if (module->mark_as_reloading())
             {
+                JSB_LOG(Log, "[transitive-reload] marked dirty: %s (is_script=%d)", module->id, (int)(bool)module->script_class_id);
                 requested_modules.append(module->id);
             }
         }
 
         for (const StringName& id : requested_modules)
         {
-            JSB_LOG(Verbose, "changed module check: %s", id);
+            JSB_LOG(Log, "[transitive-reload] reloading via load(): %s", id);
             load(id);
         }
         return requested_modules;
