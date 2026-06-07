@@ -738,6 +738,14 @@ namespace jsb
             jsb_check((size_t)(int)len == len);
 
             JSB_LOG(Log, "[transitive-reload] resolver loading source url=%s len=%d", source_url, (int)len);
+            if (p_asset_path.ends_with("mapBgView.ts"))
+            {
+                // dump the last 600 chars of the wrapped source so we can see how
+                // SWC compiled `exports.default = class ...` for this file.
+                const size_t tail_len = std::min<size_t>(len, 600);
+                const String tail = String::utf8((const char*)source.ptr() + (len - tail_len), (int)tail_len);
+                JSB_LOG(Log, "[transitive-reload] tail of wrapped source:\n%s", tail);
+            }
             // source evaluator (the module protocol)
             const v8::MaybeLocal<v8::Value> func_maybe = impl::Helper::compile_function(context, (const char*) source.ptr(), (int) len, source_url);
             if (func_maybe.IsEmpty())
