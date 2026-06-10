@@ -8,6 +8,7 @@ const jsb = require("godot-jsb") as { internal: { scan_external_changes: () => v
 const SCRIPT_PATH = "res://tests/reload/script-class-target.ts";
 const BASE_PATH = "res://tests/reload/transitive-base.ts";
 const DEPENDENT_PATH = "res://tests/reload/transitive-dependent.ts";
+const ACCESSOR_PATH = "res://tests/reload/accessor-reload-target.ts";
 
 function readFile(path: string): string {
     const reader = FileAccess.open(path, FileAccess.ModeFlags.READ);
@@ -101,12 +102,71 @@ async function runTransitiveReloadTest(): Promise<void> {
     }
 }
 
+// Verifies that an exported `accessor` field stays readable and writable on a
+// LIVE instance after that instance's class is hot-reloaded. A TC39 accessor
+// lowers to a per-class #private brand; the editor reload swaps the class in
+// place (Environment::_rebind does a v8 SetPrototype, no reconstruction), so
+// without a reload-stable backing the reloaded class's getter/setter throw
+// "Cannot read/write private member ... whose class did not declare it" on the
+// pre-reload instance the moment the inspector (or code) touches the field.
+async function runAccessorReloadTest(): Promise<void> {
+    const original = readFile(ACCESSOR_PATH);
+    let node: (Node & { label: string }) | undefined;
+    try {
+        const before = require("./accessor-reload-target");
+        const Target = before?.default;
+        if (typeof Target !== "function") {
+            throw new Error("baseline: accessor-reload-target default export missing");
+        }
+        node = new Target() as Node & { label: string };
+        node.label = "before";
+        if (node.label !== "before") {
+            throw new Error(`baseline: accessor getter returned ${JSON.stringify(node.label)} (expected "before")`);
+        }
+
+        await sleep(1100);
+        const mutated = original.replace("return 1;", "return 2;");
+        if (mutated === original) throw new Error("mutation produced no diff");
+        writeFile(ACCESSOR_PATH, mutated);
+
+        jsb.internal.scan_external_changes();
+
+        // The class was swapped in place and the live instance rebound to the
+        // new prototype. Reading the pre-reload value must not throw and must be
+        // preserved; the accessor must remain writable.
+        let preserved: string;
+        try {
+            preserved = node.label;
+        } catch (error) {
+            throw new Error(`post-reload: reading exported accessor on a hot-reloaded instance threw: ${error}`);
+        }
+        if (preserved !== "before") {
+            throw new Error(`post-reload: exported accessor value not preserved, got ${JSON.stringify(preserved)}`);
+        }
+        try {
+            node.label = "after";
+        } catch (error) {
+            throw new Error(`post-reload: writing exported accessor on a hot-reloaded instance threw: ${error}`);
+        }
+        if (node.label !== "after") {
+            throw new Error(`post-reload: exported accessor not writable after reload, got ${JSON.stringify(node.label)}`);
+        }
+        console.log("TestScriptClassReload: accessor-reload OK");
+    } finally {
+        node?.free();
+        writeFile(ACCESSOR_PATH, original);
+        await sleep(1100);
+        jsb.internal.scan_external_changes();
+    }
+}
+
 export default class TestScriptClassReload extends Node {
     _ready(): void {
         beginAsyncTest();
         (async () => {
             await runDirectScriptClassReloadTest();
             await runTransitiveReloadTest();
+            await runAccessorReloadTest();
         })()
             .catch((error) => reportTestFailure("script-class-reload", error))
             .finally(() => endAsyncTest());

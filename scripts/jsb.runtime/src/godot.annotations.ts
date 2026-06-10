@@ -59,6 +59,30 @@ function invoke_with_this<TArgs extends unknown[], TReturn>(
     return Function.prototype.call.call(fn, this_arg, ...args) as TReturn;
 }
 
+// Backing storage for exported `accessor` fields.
+//
+// A TC39 auto-accessor lowers to a per-class `#private` brand field. On
+// hot-reload the script class is swapped (a new brand), but live instances keep
+// the brand from the class that constructed them, so the reloaded class's
+// getter/setter throw "Cannot read/write private member ... whose class did not
+// declare it" the moment the inspector (or code) touches the field.
+//
+// Keying the value by instance in a module-level WeakMap sidesteps the brand:
+// this module is part of the runtime bundle and is never hot-reloaded, so the
+// map survives a class swap. It is keyed by property name so the decorator,
+// when it re-runs on the reloaded class, resolves the same WeakMap and live
+// instances keep their values. WeakMap keys are GC'd with their instances.
+const accessor_backing = new Map<string, WeakMap<object, unknown>>();
+
+function get_accessor_backing(name: string): WeakMap<object, unknown> {
+    let backing = accessor_backing.get(name);
+    if (backing === undefined) {
+        backing = new WeakMap<object, unknown>();
+        accessor_backing.set(name, backing);
+    }
+    return backing;
+}
+
 interface EnumPlaceholder {
     target: Record<string, string | number>;
 }
@@ -834,7 +858,26 @@ export function createClassBinder(): ClassBinder {
             }
 
             switch (context.kind) {
-                case "accessor":
+                case "accessor": {
+                    add_property(name, type, options && proxy.object_proxy(options, true));
+
+                    // Back the auto-accessor with a reload-stable WeakMap instead
+                    // of the per-class `#private` brand (see accessor_backing).
+                    const backing = get_accessor_backing(name);
+
+                    return {
+                        get(this: Godot.Object): unknown {
+                            return backing.get(this);
+                        },
+                        set(this: Godot.Object, value: unknown): void {
+                            backing.set(this, value);
+                        },
+                        init(this: Godot.Object, value: unknown): unknown {
+                            backing.set(this, value);
+                            return value;
+                        },
+                    } satisfies ClassMemberDecoratorReturn<ClassAccessorDecoratorContext> as any;
+                }
                 case "field":
                 case "getter":
                 case "setter":
