@@ -574,6 +574,21 @@ namespace jsb
             {
                 return true;
             }
+            // M4 fallback: an absolute `.ts` path may not exist on disk in an
+            // exported pack when the export plugin pre-transpiled and packed
+            // the converted `.js` instead. Try the converted path before
+            // declaring failure so autoloads / direct .ts references still
+            // resolve to the pre-transpiled output.
+            if (p_module_id.ends_with("." JSB_TYPESCRIPT_EXT))
+            {
+                const String compiled_path = internal::PathUtil::convert_typescript_path(p_module_id);
+                if (FileAccess::exists(compiled_path))
+                {
+                    r_source_info.source_filepath = compiled_path;
+                    r_source_info.package_filepath = String();
+                    return true;
+                }
+            }
             r_source_info = {};
             JSB_LOG(Warning, "failed to check out module (absolute) %s", p_module_id);
             return false;
