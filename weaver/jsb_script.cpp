@@ -519,7 +519,10 @@ void GodotJSScript::load_module_immediately()
     if (loaded_) return;
     JSB_BENCHMARK_SCOPE(GodotJSScript, load_module);
 
-    const String path = jsb::internal::PathUtil::convert_typescript_path(get_path());
+    // Runtime loads the .ts source directly; the module resolver invokes the
+    // embedded SWC transpiler. The convert_typescript_path rewrite is kept
+    // intact for the export plugin (M4).
+    const String path = get_path();
     jsb::JSEnvironment env(get_path(), true);
 
     loaded_ = true;
