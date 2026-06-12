@@ -431,6 +431,84 @@ jobs:
           path: ${{ github.workspace }}/bin/godot.windows.${{ matrix.target }}.x86_64.exe
           retention-days: 3
 
+  build-web:
+    name: 🕸️ Web (${{ matrix.target }})
+    needs: [prep, environment]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [template_release, template_debug]
+    steps:
+      - name: Checkout Godot
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.prep.outputs.version_ref }}
+          submodules: recursive
+
+      - name: Checkout GodotJS (hatgg)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prep.outputs.tag }}
+          path: ${{ github.workspace }}/modules/GodotJS/
+          lfs: true
+          submodules: recursive
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/local/lib/android
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: hatgg-web-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.11
+
+      # Build the JS runtime (scripts/out) + the web bridge (impl/web) up front;
+      # scons then runs with skip_js_runtime=yes. No Rust/cargo: transpiler-ffi
+      # is gated off for web (no wasm triple) via JSB_WITH_TYPESCRIPT_TRANSPILER,
+      # and the resolver compiles out the runtime .ts path. Web ships .js.
+      - name: Build JS runtime + web bridge
+        run: |
+          set -euo pipefail
+          npm i -g pnpm
+          cd modules/GodotJS
+          pnpm install
+          pnpm build
+
+      - name: Compile
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: >-
+            verbose=yes
+            module_text_server_fb_enabled=yes
+            skip_js_runtime=yes
+            debug_symbols=no
+          platform: web
+          target: ${{ matrix.target }}
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: hatgg-web-${{ matrix.target }}-${{ needs.prep.outputs.version }}
+        continue-on-error: true
+
+      - name: Upload template
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-${{ matrix.target }}
+          path: ${{ github.workspace }}/bin/godot.web.${{ matrix.target }}.wasm32.zip
+          retention-days: 3
+
   publish:
     name: 🦅 Publish to S3 + GitHub Release
     needs: [prep, build-macos, build-linux, build-windows]
@@ -520,3 +598,31 @@ jobs:
             **Note**: macOS binaries are ad-hoc signed (no Developer ID). Curl
             downloads run as-is; browser/Slack downloads still need
             `xattr -d com.apple.quarantine <path>` once per file.
+
+  # Web is published separately so a web hiccup never blocks the (proven)
+  # desktop release. The god CLI fetches web_release.zip / web_debug.zip from
+  # export_templates/ (packages/god/src/export-templates.ts).
+  publish-web:
+    name: 🕸️ Publish web templates to S3
+    needs: [prep, build-web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download web artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: web-*
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload to S3
+        run: |
+          set -euo pipefail
+          S3_BASE="s3://godotjs/${{ needs.prep.outputs.hatgg_path }}"
+          aws s3 cp artifacts/web-template_release/godot.web.template_release.wasm32.zip "$S3_BASE/export_templates/web_release.zip"
+          aws s3 cp artifacts/web-template_debug/godot.web.template_debug.wasm32.zip     "$S3_BASE/export_templates/web_debug.zip"
