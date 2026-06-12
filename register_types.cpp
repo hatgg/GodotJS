@@ -6,33 +6,6 @@
 #include "weaver-editor/jsb_weaver_editor.h"
 #endif
 
-#include "godotjs_transpiler.h"
-
-// M1 link-proof: transpile a literal .ts string and print the result at
-// startup so the SCons → cargo → static-link path is end-to-end verified.
-// Remove once M2 wires the real runtime loader call site.
-static void jsb_m1_transpile_smoketest() {
-    static const char kSource[] = "const x: number = 41; console.log(x + 1)";
-    static const char kFilename[] = "<m1-smoketest>.ts";
-    GodotJSTranspileResult* r = godotjs_transpile_ts(
-        reinterpret_cast<const uint8_t*>(kSource), sizeof(kSource) - 1,
-        reinterpret_cast<const uint8_t*>(kFilename), sizeof(kFilename) - 1,
-        0);
-    if (!r) {
-        print_line("[GodotJS/M1] transpile returned null");
-        return;
-    }
-    if (r->error) {
-        print_line(vformat("[GodotJS/M1] transpile error: %s",
-            String::utf8(reinterpret_cast<const char*>(r->error), int64_t(r->error_len))));
-    } else if (r->code) {
-        print_line(vformat("[GodotJS/M1] transpile ok (%d bytes):\n%s",
-            int(r->code_len),
-            String::utf8(reinterpret_cast<const char*>(r->code), int64_t(r->code_len))));
-    }
-    godotjs_free_transpile_result(r);
-}
-
 static Ref<ResourceFormatLoaderGodotJSScript> resource_loader_js;
 static Ref<ResourceFormatSaverGodotJSScript> resource_saver_js;
 
@@ -40,8 +13,6 @@ void jsb_initialize_module(ModuleInitializationLevel p_level)
 {
     if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS)
     {
-        jsb_m1_transpile_smoketest();
-
         GDREGISTER_CLASS(GodotJSScript);
 #ifdef TOOLS_ENABLED
         GDREGISTER_CLASS(GodotJSEditorHelper);

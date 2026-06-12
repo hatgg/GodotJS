@@ -4,14 +4,17 @@
 #include "../internal/jsb_path_util.h"
 #include "core/crypto/crypto_core.h"
 
+#if JSB_WITH_TYPESCRIPT_TRANSPILER
 extern "C" {
 #include "godotjs_transpiler.h"
 }
+#endif
 
 namespace jsb
 {
     namespace
     {
+#if JSB_WITH_TYPESCRIPT_TRANSPILER
         // Transpile a TypeScript source into the same `(function(exports,require,module,__filename,__dirname){ ... \n})`
         // wrapper that `read_all_bytes_with_shebang` produces for `.js` sources.
         // When SWC produced a sourcemap, the `//# sourceMappingURL=<data-url>`
@@ -119,6 +122,7 @@ namespace jsb
             godotjs_free_transpile_result(result);
             return true;
         }
+#endif
     }
 
     namespace
@@ -722,6 +726,7 @@ namespace jsb
             size_t len;
             if (is_typescript)
             {
+#if JSB_WITH_TYPESCRIPT_TRANSPILER
                 String transpile_error;
                 if (!transpile_typescript_to_wrapped_source(p_env, source_url, p_reader, source, transpile_error))
                 {
@@ -730,6 +735,10 @@ namespace jsb
                     return false;
                 }
                 len = source.size() - 1; // exclude trailing zero
+#else
+                impl::Helper::throw_error(isolate, jsb_format("cannot load .ts at runtime on this platform (no embedded transpiler); pre-transpile to .js at export time: %s", p_asset_path));
+                return false;
+#endif
             }
             else
             {

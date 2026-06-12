@@ -13,8 +13,30 @@ pub struct TranspileResult {
 /// # Safety
 /// `source`/`filename` must point to `*_len` valid bytes. The returned
 /// pointer must be freed via [`godotjs_free_transpile_result`].
+///
+/// A panic inside the transpiler (e.g. an SWC internal assertion on malformed
+/// input) is caught at this boundary and turned into an error result — it must
+/// never unwind across the C ABI into the engine (that would be UB).
 #[no_mangle]
 pub unsafe extern "C" fn godotjs_transpile_ts(
+    source: *const u8,
+    source_len: usize,
+    filename: *const u8,
+    filename_len: usize,
+    opts: u32,
+) -> *mut TranspileResult {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        transpile_ts_impl(source, source_len, filename, filename_len, opts)
+    })) {
+        Ok(result) => result,
+        Err(_) => make_error(b"transpiler panicked"),
+    }
+}
+
+/// # Safety
+/// Same contract as [`godotjs_transpile_ts`]; this is the inner implementation
+/// run inside the panic boundary.
+unsafe fn transpile_ts_impl(
     source: *const u8,
     source_len: usize,
     filename: *const u8,

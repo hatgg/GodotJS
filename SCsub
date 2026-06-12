@@ -503,26 +503,34 @@ def build_transpiler_ffi():
           f"transpiler-ffi: expected staticlib at {lib_path} after cargo build")
     return lib_path
 
-transpiler_ffi_lib = build_transpiler_ffi()
-env_jsb.Append(CPPPATH=[f"#modules/{module_name}/transpiler-ffi/include"])
-env.Append(LIBS=[File(transpiler_ffi_lib)])
+# transpiler-ffi only builds for native desktop targets that have a Rust target
+# triple mapped (macos/linux/windows). web/android/ios have no triple here: they
+# ship pre-transpiled .js (export-time pre-transpile) and use their own JS engine,
+# so they skip the staticlib and compile out the runtime .ts load path via the
+# JSB_WITH_TYPESCRIPT_TRANSPILER define below.
+has_transpiler = rust_target_triple_for(jsb_platform, jsb_arch) is not None
+env_jsb.Append(CPPDEFINES=[("JSB_WITH_TYPESCRIPT_TRANSPILER", 1 if has_transpiler else 0)])
+if has_transpiler:
+    transpiler_ffi_lib = build_transpiler_ffi()
+    env_jsb.Append(CPPPATH=[f"#modules/{module_name}/transpiler-ffi/include"])
+    env.Append(LIBS=[File(transpiler_ffi_lib)])
 
-# Rust staticlibs may pull in platform frameworks/libs that Godot doesn't
-# already link. SWC's tree is mostly pure Rust; these covers the OS-specific
-# system bits its transitive deps reach for. Refine if the linker complains.
-#
-# The --allow-multiple-definition / /FORCE:MULTIPLE flags below cover a
-# specific clash: our staticlib and Godot's prebuilt accesskit staticlib both
-# bundle rust_eh_personality (and a few other libstd symbols) from rustc's
-# libstd, compiled against different rustc versions. GNU ld and MSVC link.exe
-# error on the duplicate; macOS ld64 silently picks one. The clash is benign
-# — both copies are ABI-compatible personality routines.
-if jsb_platform == "macos":
-    env.Append(LINKFLAGS=["-framework", "CoreFoundation", "-framework", "Security"])
-elif jsb_platform == "linux":
-    env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
-elif jsb_platform == "windows":
-    env.Append(LINKFLAGS=["userenv.lib", "ntdll.lib", "bcrypt.lib", "/FORCE:MULTIPLE"])
+    # Rust staticlibs may pull in platform frameworks/libs that Godot doesn't
+    # already link. SWC's tree is mostly pure Rust; these cover the OS-specific
+    # system bits its transitive deps reach for. Refine if the linker complains.
+    #
+    # The --allow-multiple-definition / /FORCE:MULTIPLE flags below cover a
+    # specific clash: our staticlib and Godot's prebuilt accesskit staticlib both
+    # bundle rust_eh_personality (and a few other libstd symbols) from rustc's
+    # libstd, compiled against different rustc versions. GNU ld and MSVC link.exe
+    # error on the duplicate; macOS ld64 silently picks one. The clash is benign
+    # — both copies are ABI-compatible personality routines.
+    if jsb_platform == "macos":
+        env.Append(LINKFLAGS=["-framework", "CoreFoundation", "-framework", "Security"])
+    elif jsb_platform == "linux":
+        env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
+    elif jsb_platform == "windows":
+        env.Append(LINKFLAGS=["userenv.lib", "ntdll.lib", "bcrypt.lib", "/FORCE:MULTIPLE"])
 # -------------------------------------------------------------------------------
 
 # Build JS files before generating
